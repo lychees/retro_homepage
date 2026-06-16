@@ -413,7 +413,7 @@ function leaveRoom(socket, type) {
         users: Array.from(room.users.values())
     });
 
-    if (room.users.size === 0 && type !== 'oekaki') {
+    if (room.users.size === 0) {
         delete rooms[joinedKey];
     }
 
@@ -998,15 +998,55 @@ io.on('connection', (socket) => {
         const stroke = {
             id: data.id || (Date.now() + '_' + Math.random().toString(36).slice(2)),
             room: roomId,
+            tool: data.tool,
             from: data.from,
             to: data.to,
+            x: data.x,
+            y: data.y,
+            text: data.text,
             color: data.color,
             size: data.size || 4,
-            alpha: data.alpha == null ? 1 : data.alpha
+            alpha: data.alpha == null ? 1 : data.alpha,
+            groupId: data.groupId
         };
         room.strokes.push(stroke);
         if (room.strokes.length > 3000) room.strokes.shift();
         socket.to(key).emit('pictionary:stroke', stroke);
+    });
+    socket.on('pictionary:undo', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `pictionary:${roomId}`;
+        const room = rooms[key];
+        if (!room || room.type !== 'pictionary') return;
+        if (room.status !== 'drawing' || socket.id !== room.currentDrawer) return;
+        const id = data.id;
+        if (!id) return;
+        const stroke = room.strokes.find(s => s.id === id);
+        if (!stroke) return;
+        const groupId = stroke.groupId;
+        let removedIds;
+        if (groupId) {
+            removedIds = room.strokes.filter(s => s.groupId === groupId).map(s => s.id);
+            room.strokes = room.strokes.filter(s => s.groupId !== groupId);
+        } else {
+            removedIds = [id];
+            room.strokes = room.strokes.filter(s => s.id !== id);
+        }
+        io.to(key).emit('pictionary:strokes:removed', { room: roomId, ids: removedIds });
+    });
+    socket.on('pictionary:import', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `pictionary:${roomId}`;
+        const room = rooms[key];
+        if (!room || room.type !== 'pictionary') return;
+        if (room.status !== 'drawing' || socket.id !== room.currentDrawer) return;
+        const strokes = Array.isArray(data.strokes) ? data.strokes : [];
+        strokes.forEach(s => {
+            s.room = roomId;
+            room.strokes.push(s);
+        });
+        if (room.strokes.length > 3000) room.strokes.splice(0, room.strokes.length - 3000);
+        io.to(key).emit('pictionary:import', { room: roomId, strokes: strokes });
     });
     socket.on('pictionary:clear', (data) => {
         const roomId = (data.room || '').toString().trim().toUpperCase();

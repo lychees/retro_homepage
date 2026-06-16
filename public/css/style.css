@@ -877,6 +877,20 @@ input[type="text"]:focus, select:focus {
     padding: 12px;
 }
 
+.pictionary-sidebar {
+    background: rgba(20, 20, 45, 0.8);
+    border: 1px solid #5555aa;
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.pictionary-sidebar h4 {
+    margin: 0 0 8px 0;
+    color: #00ffff;
+    border-bottom: 1px dashed #5555aa;
+    padding-bottom: 6px;
+}
+
 .pictionary-layout {
     display: grid;
     grid-template-columns: 180px 1fr 240px;
