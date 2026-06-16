@@ -30,6 +30,10 @@
     var wheelSat = 0;
     var wheelVal = 0;
 
+    // 常用颜色
+    var maxPresets = 8;
+    var colorPresets = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+
     function $(id) { return document.getElementById(id); }
 
     function generateId(prefix) {
@@ -202,8 +206,42 @@
         var box = $('oekaki-current-color');
         if (box) box.style.background = color;
         updateWheelFromColor(color);
+        addColorPreset(color);
         if (emit && roomId) {
             window.socket.emit('oekaki:color', { room: roomId, color: color });
+        }
+    }
+
+    function addColorPreset(color) {
+        if (!color || color[0] !== '#') return;
+        var lower = color.toLowerCase();
+        colorPresets = colorPresets.filter(function (c) { return c.toLowerCase() !== lower; });
+        colorPresets.unshift(lower);
+        if (colorPresets.length > maxPresets) colorPresets.pop();
+        renderColorPresets();
+    }
+
+    function renderColorPresets() {
+        var container = $('oekaki-color-presets');
+        if (!container) return;
+        container.innerHTML = '';
+        for (var i = 0; i < maxPresets; i++) {
+            var div = document.createElement('div');
+            div.className = 'color-preset' + (colorPresets[i] ? '' : ' empty');
+            if (colorPresets[i]) {
+                div.style.background = colorPresets[i];
+                div.title = colorPresets[i];
+                div.addEventListener('click', (function (c) {
+                    return function () {
+                        setColor(c, true);
+                        currentTool = 'pen';
+                        document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
+                        var pen = document.querySelector('[data-tool="pen"]');
+                        if (pen) pen.classList.add('active');
+                    };
+                })(colorPresets[i]));
+            }
+            container.appendChild(div);
         }
     }
 
@@ -737,6 +775,7 @@
         bindColorWheel();
         initLayers();
         bindKeys();
+        renderColorPresets();
         clearCanvas();
         localStrokes = [];
         updateUsers(users || []);
@@ -902,6 +941,7 @@
             $('oekaki-room-id').textContent = '#' + roomId;
             bindCanvas();
             bindColorWheel();
+            renderColorPresets();
             window.socket.emit('oekaki:rejoin', { room: roomId });
             if (chatRoom) {
                 chatRoom.roomId = roomId;

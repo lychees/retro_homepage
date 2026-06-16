@@ -579,6 +579,40 @@ input[type="text"]:focus, select:focus {
     box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
 }
 
+.color-presets-title {
+    font-size: 12px;
+    color: #9999cc;
+    text-align: center;
+    margin-top: 4px;
+}
+
+.color-presets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    width: 100%;
+}
+
+.color-preset {
+    width: 100%;
+    height: 28px;
+    border: 1px solid #5555aa;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+    transition: transform 0.1s;
+}
+
+.color-preset:hover {
+    transform: scale(1.08);
+    border-color: #00ffff;
+}
+
+.color-preset.empty {
+    background: rgba(40, 40, 80, 0.4);
+    cursor: default;
+}
+
 .oekaki-right {
     display: flex;
     flex-direction: column;
