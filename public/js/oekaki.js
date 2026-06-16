@@ -151,6 +151,38 @@
                 setAlpha(parseInt(alphaSlider.value, 10) / 100, true);
             });
         }
+        bindRgbaInputs();
+    }
+
+    function bindRgbaInputs() {
+        var ids = ['oekaki-r', 'oekaki-g', 'oekaki-b'];
+        ids.forEach(function (id) {
+            var input = $(id);
+            if (!input || input._bound) return;
+            input._bound = true;
+            input.addEventListener('input', function () {
+                var r = clampChannel($('oekaki-r').value);
+                var g = clampChannel($('oekaki-g').value);
+                var b = clampChannel($('oekaki-b').value);
+                var hex = rgbToHex(r, g, b);
+                setColor(hex, currentAlpha, true);
+            });
+        });
+        var aInput = $('oekaki-a');
+        if (aInput && !aInput._bound) {
+            aInput._bound = true;
+            aInput.addEventListener('input', function () {
+                var a = parseFloat(aInput.value);
+                if (isNaN(a)) return;
+                setAlpha(Math.max(0, Math.min(1, a)), true);
+            });
+        }
+    }
+
+    function clampChannel(v) {
+        var n = parseInt(v, 10);
+        if (isNaN(n)) return 0;
+        return Math.max(0, Math.min(255, n));
     }
 
     function bindKeys() {
@@ -240,6 +272,7 @@
         }
         updateWheelFromColor(color);
         updateAlphaUI();
+        updateRgbaUI();
         if (emit && roomId) {
             window.socket.emit('oekaki:color', { room: roomId, color: color, alpha: currentAlpha });
         }
@@ -250,6 +283,7 @@
         var box = $('oekaki-current-color');
         if (box) box.style.opacity = currentAlpha;
         updateAlphaUI();
+        updateRgbaUI();
         if (emit && roomId) {
             window.socket.emit('oekaki:color', { room: roomId, color: currentColor, alpha: currentAlpha });
         }
@@ -260,6 +294,20 @@
         var label = $('oekaki-alpha-value');
         if (slider) slider.value = Math.round(currentAlpha * 100);
         if (label) label.textContent = Math.round(currentAlpha * 100) + '%';
+    }
+
+    function updateRgbaUI() {
+        var rgb = hexToRgb(currentColor) || { r: 0, g: 0, b: 0 };
+        var rInput = $('oekaki-r');
+        var gInput = $('oekaki-g');
+        var bInput = $('oekaki-b');
+        var aInput = $('oekaki-a');
+        var text = $('oekaki-rgba-text');
+        if (rInput) rInput.value = rgb.r;
+        if (gInput) gInput.value = rgb.g;
+        if (bInput) bInput.value = rgb.b;
+        if (aInput) aInput.value = Math.round(currentAlpha * 100) / 100;
+        if (text) text.textContent = 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', ' + (Math.round(currentAlpha * 100) / 100) + ')';
     }
 
     function selectPreset(index) {

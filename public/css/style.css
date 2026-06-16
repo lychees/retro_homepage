@@ -619,6 +619,44 @@ input[type="text"]:focus, select:focus {
     cursor: default;
 }
 
+.rgba-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    font-size: 13px;
+    color: #aaaaff;
+}
+
+.rgba-inputs {
+    display: flex;
+    gap: 4px;
+}
+
+.rgba-inputs input[type="number"] {
+    width: 42px;
+    padding: 3px 4px;
+    font-size: 13px;
+    color: #e0e0ff;
+    background: rgba(20, 20, 50, 0.8);
+    border: 1px solid #5555aa;
+    border-radius: 3px;
+    text-align: center;
+}
+
+.rgba-inputs input[type="number"]:focus {
+    outline: none;
+    border-color: #00ffff;
+    box-shadow: 0 0 6px rgba(0, 255, 255, 0.3);
+}
+
+.rgba-text {
+    font-size: 12px;
+    color: #00ffff;
+    text-align: center;
+    font-family: monospace;
+}
+
 .alpha-row,
 .layer-opacity-row {
     display: flex;
