@@ -380,6 +380,13 @@ function leaveRoom(socket, type) {
     if (room.type === 'fc') {
         if (room.playerSlots[0] === socket.id) room.playerSlots[0] = null;
         if (room.playerSlots[1] === socket.id) room.playerSlots[1] = null;
+        if (room.users.size === 1) {
+            // 只剩一人时回到单人模式，统一归为玩家 1，避免上一局的按键状态残留
+            const remainingId = room.users.keys().next().value;
+            room.playerSlots[0] = remainingId;
+            room.playerSlots[1] = null;
+            room.controllers = { 1: {}, 2: {} };
+        }
         if (room.users.size > 0) {
             io.to(joinedKey).emit('fc:controllers', {
                 controllers: room.controllers,
