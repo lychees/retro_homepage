@@ -26,21 +26,19 @@
         </div>
         <div class="oekaki-layout">
             <div class="oekaki-tools">
-                <div class="tool-btn active" data-tool="pen" title="画笔">✏️</div>
-                <div class="tool-btn" data-tool="eraser" title="橡皮">🧼</div>
-                <div class="tool-btn" data-tool="text" title="文字">T</div>
-                <div class="tool-btn" id="oekaki-clear" title="清空">🗑️</div>
-                <div style="margin-top:8px;">颜色</div>
-                <div class="color-swatch active" style="background:#000000" data-color="#000000"></div>
-                <div class="color-swatch" style="background:#ff0000" data-color="#ff0000"></div>
-                <div class="color-swatch" style="background:#00ff00" data-color="#00ff00"></div>
-                <div class="color-swatch" style="background:#0000ff" data-color="#0000ff"></div>
-                <div class="color-swatch" style="background:#ffff00" data-color="#ffff00"></div>
-                <div class="color-swatch" style="background:#ff00ff" data-color="#ff00ff"></div>
-                <div class="color-swatch" style="background:#00ffff" data-color="#00ffff"></div>
-                <div class="color-swatch" style="background:#ffffff" data-color="#ffffff"></div>
-                <input type="color" id="oekaki-color-picker" class="color-picker" value="#000000" title="真彩色调色盘">
-                <div style="margin-top:8px;">粗细</div>
+                <div class="tool-row">
+                    <div class="tool-btn active" data-tool="pen" title="画笔">✏️</div>
+                    <div class="tool-btn" data-tool="eraser" title="橡皮">🧼</div>
+                    <div class="tool-btn" data-tool="text" title="文字">T</div>
+                    <div class="tool-btn" data-tool="eyedropper" title="取色器">💧</div>
+                </div>
+                <div class="tool-btn" id="oekaki-clear" title="清空" style="width:100%;margin-top:6px;">🗑️ 清空</div>
+
+                <div class="color-wheel-title">调色环</div>
+                <canvas id="oekaki-color-wheel" class="color-wheel" width="140" height="140"></canvas>
+                <div class="current-color-box" id="oekaki-current-color" style="background:#000000;"></div>
+
+                <div class="brush-title">粗细</div>
                 <div class="brush-size" id="brush-sizes">
                     <span style="width:4px;height:4px;" data-size="2"></span>
                     <span style="width:8px;height:8px;" data-size="4" class="active"></span>
@@ -51,24 +49,34 @@
             <div class="oekaki-canvas-area">
                 <canvas id="oekaki-canvas" class="oekaki-canvas" width="640" height="480"></canvas>
             </div>
-            <div class="oekaki-sidebar">
-                <h4>在线画手</h4>
-                <ul class="user-list" id="oekaki-users"></ul>
-                <h4 style="margin-top:16px;">房间聊天</h4>
-                <div class="chat-messages" id="oekaki-chat-messages" style="height:160px;margin-bottom:8px;"></div>
-                <div class="chat-input-area" style="margin-top:0;">
-                    <input type="text" id="oekaki-chat-input" placeholder="按回车发送" maxlength="200" style="flex:1;font-size:16px;padding:6px;">
-                    <button class="btn" id="oekaki-chat-send" style="padding:6px 10px;">发送</button>
+            <div class="oekaki-right">
+                <div class="oekaki-layers">
+                    <h4>图层</h4>
+                    <ul class="layer-list" id="oekaki-layer-list"></ul>
+                    <div class="layer-actions">
+                        <button class="btn small" id="oekaki-add-layer">+ 新建</button>
+                        <button class="btn small danger" id="oekaki-del-layer">删除</button>
+                    </div>
                 </div>
+                <div class="oekaki-sidebar">
+                    <h4>在线画手</h4>
+                    <ul class="user-list" id="oekaki-users"></ul>
+                    <h4 style="margin-top:12px;">房间聊天</h4>
+                    <div class="chat-messages" id="oekaki-chat-messages" style="height:120px;margin-bottom:8px;"></div>
+                    <div class="chat-input-area" style="margin-top:0;">
+                        <input type="text" id="oekaki-chat-input" placeholder="按回车发送" maxlength="200" style="flex:1;font-size:16px;padding:6px;">
+                        <button class="btn" id="oekaki-chat-send" style="padding:6px 10px;">发送</button>
+                    </div>
 
-                <h4 style="margin-top:16px;">操作</h4>
-                <button class="btn secondary" id="oekaki-replay" style="width:100%;margin-bottom:8px;">🎬 回放绘画过程</button>
-                <button class="btn secondary" id="oekaki-undo" style="width:100%;margin-bottom:8px;">↩️ 撤销上一步 (Ctrl+Z)</button>
-                <button class="btn secondary" id="oekaki-export" style="width:100%;margin-bottom:8px;">📤 导出作画过程</button>
-                <label class="btn secondary" for="oekaki-import" style="width:100%;margin-bottom:8px;display:block;text-align:center;cursor:pointer;">📥 导入作画过程</label>
-                <input type="file" id="oekaki-import" accept=".json,.oekaki" style="display:none;">
-                <button class="btn secondary" id="oekaki-download" style="width:100%;margin-bottom:8px;">保存画作</button>
-                <button class="btn danger" id="oekaki-leave" style="width:100%;">离开房间</button>
+                    <h4 style="margin-top:12px;">操作</h4>
+                    <button class="btn secondary" id="oekaki-replay" style="width:100%;margin-bottom:6px;">🎬 回放</button>
+                    <button class="btn secondary" id="oekaki-undo" style="width:100%;margin-bottom:6px;">↩️ 撤销 (Ctrl+Z)</button>
+                    <button class="btn secondary" id="oekaki-export" style="width:100%;margin-bottom:6px;">📤 导出过程</button>
+                    <label class="btn secondary" for="oekaki-import" style="width:100%;margin-bottom:6px;display:block;text-align:center;cursor:pointer;">📥 导入过程</label>
+                    <input type="file" id="oekaki-import" accept=".json,.oekaki" style="display:none;">
+                    <button class="btn secondary" id="oekaki-download" style="width:100%;margin-bottom:6px;">保存画作</button>
+                    <button class="btn danger" id="oekaki-leave" style="width:100%;">离开房间</button>
+                </div>
             </div>
         </div>
     </div>

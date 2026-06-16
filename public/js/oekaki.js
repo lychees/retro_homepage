@@ -1,5 +1,6 @@
 /**
  * 茶绘房间模块
+ * 支持图层、SAI风格调色环、取色器、文字、导出/导入
  */
 (function () {
     'use strict';
@@ -18,7 +19,22 @@
     var localStrokes = [];
     var replayTimer = null;
 
+    // 图层
+    var layers = [];
+    var activeLayerId = null;
+
+    // 调色环
+    var wheelCanvas, wheelCtx;
+    var wheelDragging = false;
+    var wheelHue = 0;
+    var wheelSat = 0;
+    var wheelVal = 0;
+
     function $(id) { return document.getElementById(id); }
+
+    function generateId(prefix) {
+        return (prefix || 'id') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    }
 
     function bindOnce() {
         var createBtn = $('oekaki-create');
@@ -29,6 +45,8 @@
         var undoBtn = $('oekaki-undo');
         var exportBtn = $('oekaki-export');
         var importInput = $('oekaki-import');
+        var addLayerBtn = $('oekaki-add-layer');
+        var delLayerBtn = $('oekaki-del-layer');
 
         if (createBtn && !createBtn._bound) {
             createBtn._bound = true;
@@ -66,6 +84,16 @@
             importInput._bound = true;
             importInput.addEventListener('change', handleImport);
         }
+        if (addLayerBtn && !addLayerBtn._bound) {
+            addLayerBtn._bound = true;
+            addLayerBtn.addEventListener('click', function () {
+                createLayer('图层 ' + (layers.length + 1));
+            });
+        }
+        if (delLayerBtn && !delLayerBtn._bound) {
+            delLayerBtn._bound = true;
+            delLayerBtn.addEventListener('click', deleteActiveLayer);
+        }
     }
 
     function bindTools() {
@@ -79,29 +107,6 @@
                 currentTool = btn.getAttribute('data-tool');
             });
         });
-
-        var colors = document.querySelectorAll('[data-color]');
-        colors.forEach(function (sw) {
-            if (sw._bound) return;
-            sw._bound = true;
-            sw.addEventListener('click', function () {
-                setColor(sw.getAttribute('data-color'), true);
-                currentTool = 'pen';
-                document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
-                document.querySelector('[data-tool="pen"]').classList.add('active');
-            });
-        });
-
-        var picker = $('oekaki-color-picker');
-        if (picker && !picker._bound) {
-            picker._bound = true;
-            picker.addEventListener('input', function () {
-                setColor(picker.value, true);
-                currentTool = 'pen';
-                document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
-                document.querySelector('[data-tool="pen"]').classList.add('active');
-            });
-        }
 
         var sizes = document.querySelectorAll('#brush-sizes span');
         sizes.forEach(function (s) {
@@ -152,19 +157,23 @@
 
         function start(e) {
             e.preventDefault();
+            var pos = getPos(e);
             if (currentTool === 'text') {
-                var pos = getPos(e);
                 placeText(pos.x, pos.y);
                 return;
             }
+            if (currentTool === 'eyedropper') {
+                pickColor(pos.x, pos.y);
+                return;
+            }
             drawing = true;
-            currentGroupId = Date.now() + '_' + Math.random().toString(36).slice(2);
-            lastPos = getPos(e);
+            currentGroupId = generateId('group');
+            lastPos = pos;
         }
 
         function move(e) {
             e.preventDefault();
-            if (currentTool === 'text' || !drawing || !lastPos) return;
+            if (currentTool === 'text' || currentTool === 'eyedropper' || !drawing || !lastPos) return;
             var pos = getPos(e);
             drawStroke(lastPos, pos, currentTool, currentColor, currentSize, true, null, currentGroupId);
             lastPos = pos;
@@ -186,24 +195,323 @@
         canvas.addEventListener('touchend', end, { passive: false });
     }
 
+    // ===== 颜色工具 =====
+
     function setColor(color, emit) {
         currentColor = color;
-        var picker = $('oekaki-color-picker');
-        if (picker) picker.value = color;
-        document.querySelectorAll('[data-color]').forEach(function (c) {
-            if (c.getAttribute('data-color').toLowerCase() === color.toLowerCase()) {
-                c.classList.add('active');
-            } else {
-                c.classList.remove('active');
-            }
-        });
+        var box = $('oekaki-current-color');
+        if (box) box.style.background = color;
+        updateWheelFromColor(color);
         if (emit && roomId) {
             window.socket.emit('oekaki:color', { room: roomId, color: color });
         }
     }
 
+    function pickColor(x, y) {
+        if (!ctx) return;
+        var pixel = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+        var hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
+        setColor(hex, true);
+        // 取色后自动切回画笔
+        currentTool = 'pen';
+        document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
+        var pen = document.querySelector('[data-tool="pen"]');
+        if (pen) pen.classList.add('active');
+    }
+
+    function rgbToHex(r, g, b) {
+        return '#' + [r, g, b].map(function (v) {
+            var hex = Math.max(0, Math.min(255, v)).toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+        }).join('');
+    }
+
+    function hsvToRgb(h, s, v) {
+        var r, g, b;
+        var i = Math.floor(h * 6);
+        var f = h * 6 - i;
+        var p = v * (1 - s);
+        var q = v * (1 - f * s);
+        var t = v * (1 - (1 - f) * s);
+        switch (i % 6) {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            case 5: r = v; g = p; b = q; break;
+        }
+        return {
+            r: Math.round(r * 255),
+            g: Math.round(g * 255),
+            b: Math.round(b * 255)
+        };
+    }
+
+    function rgbToHsv(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        var max = Math.max(r, g, b);
+        var min = Math.min(r, g, b);
+        var h, s, v = max;
+        var d = max - min;
+        s = max === 0 ? 0 : d / max;
+        if (max === min) {
+            h = 0;
+        } else {
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return { h: h, s: s, v: v };
+    }
+
+    function updateWheelFromColor(color) {
+        var rgb = hexToRgb(color);
+        if (!rgb) return;
+        var hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+        wheelHue = hsv.h;
+        wheelSat = hsv.s;
+        wheelVal = hsv.v;
+        drawColorWheel();
+    }
+
+    function hexToRgb(hex) {
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+
+    function bindColorWheel() {
+        wheelCanvas = $('oekaki-color-wheel');
+        if (!wheelCanvas) return;
+        wheelCtx = wheelCanvas.getContext('2d');
+        drawColorWheel();
+
+        function getPos(e) {
+            var rect = wheelCanvas.getBoundingClientRect();
+            var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (wheelCanvas.width / rect.width),
+                y: (clientY - rect.top) * (wheelCanvas.height / rect.height)
+            };
+        }
+
+        function handle(e) {
+            e.preventDefault();
+            var pos = getPos(e);
+            var cx = wheelCanvas.width / 2;
+            var cy = wheelCanvas.height / 2;
+            var dx = pos.x - cx;
+            var dy = pos.y - cy;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            var outerR = cx - 4;
+            var innerR = outerR * 0.55;
+
+            if (dist >= innerR && dist <= outerR) {
+                // 色相环
+                wheelHue = (Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI);
+            } else if (dist < innerR) {
+                // SV 三角形（简化为中心三角形）
+                setWheelSVFromPoint(dx, dy, innerR);
+            }
+            updateColorFromWheel(true);
+            drawColorWheel();
+        }
+
+        wheelCanvas.addEventListener('mousedown', function (e) {
+            wheelDragging = true;
+            handle(e);
+        });
+        document.addEventListener('mousemove', function (e) {
+            if (!wheelDragging) return;
+            handle(e);
+        });
+        document.addEventListener('mouseup', function () {
+            wheelDragging = false;
+        });
+        wheelCanvas.addEventListener('touchstart', function (e) {
+            wheelDragging = true;
+            handle(e);
+        }, { passive: false });
+        document.addEventListener('touchmove', function (e) {
+            if (!wheelDragging) return;
+            handle(e);
+        }, { passive: false });
+        document.addEventListener('touchend', function () {
+            wheelDragging = false;
+        });
+    }
+
+    function setWheelSVFromPoint(dx, dy, radius) {
+        // 将内部圆映射到 SV：x -> saturation, y -> value
+        var nx = Math.max(-1, Math.min(1, dx / radius));
+        var ny = Math.max(-1, Math.min(1, dy / radius));
+        wheelSat = (nx + 1) / 2;
+        wheelVal = 1 - (ny + 1) / 2;
+    }
+
+    function updateColorFromWheel(emit) {
+        var rgb = hsvToRgb(wheelHue, wheelSat, wheelVal);
+        var hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+        currentColor = hex;
+        var box = $('oekaki-current-color');
+        if (box) box.style.background = hex;
+        if (emit && roomId) {
+            window.socket.emit('oekaki:color', { room: roomId, color: hex });
+        }
+    }
+
+    function drawColorWheel() {
+        if (!wheelCtx) return;
+        var w = wheelCanvas.width;
+        var h = wheelCanvas.height;
+        var cx = w / 2;
+        var cy = h / 2;
+        var outerR = cx - 4;
+        var innerR = outerR * 0.55;
+
+        wheelCtx.clearRect(0, 0, w, h);
+
+        // 色相环
+        for (var angle = 0; angle < 360; angle++) {
+            var start = (angle - 1) * Math.PI / 180;
+            var end = (angle + 1) * Math.PI / 180;
+            var rgb = hsvToRgb(angle / 360, 1, 1);
+            wheelCtx.beginPath();
+            wheelCtx.arc(cx, cy, outerR, start, end);
+            wheelCtx.arc(cx, cy, innerR, end, start, true);
+            wheelCtx.fillStyle = 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')';
+            wheelCtx.fill();
+        }
+
+        // SV 内圆（当前色相下的饱和/明度）
+        var grad = wheelCtx.createRadialGradient(cx, cy, 0, cx, cy, innerR);
+        var hueRgb = hsvToRgb(wheelHue, 1, 1);
+        grad.addColorStop(0, 'rgb(255,255,255)');
+        grad.addColorStop(0.5, 'rgb(' + hueRgb.r + ',' + hueRgb.g + ',' + hueRgb.b + ')');
+        grad.addColorStop(1, 'rgb(0,0,0)');
+        wheelCtx.beginPath();
+        wheelCtx.arc(cx, cy, innerR, 0, Math.PI * 2);
+        wheelCtx.fillStyle = grad;
+        wheelCtx.fill();
+
+        // 当前选择指示器
+        var rgb = hsvToRgb(wheelHue, wheelSat, wheelVal);
+        wheelCtx.beginPath();
+        wheelCtx.arc(cx, cy, innerR * 0.35, 0, Math.PI * 2);
+        wheelCtx.fillStyle = 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')';
+        wheelCtx.fill();
+        wheelCtx.strokeStyle = '#ffffff';
+        wheelCtx.lineWidth = 2;
+        wheelCtx.stroke();
+    }
+
+    // ===== 图层工具 =====
+
+    function initLayers() {
+        layers = [{ id: generateId('layer'), name: '图层 1', visible: true }];
+        activeLayerId = layers[0].id;
+        renderLayerList();
+    }
+
+    function createLayer(name, fromServer) {
+        var layer = { id: generateId('layer'), name: name || '新图层', visible: true };
+        layers.push(layer);
+        activeLayerId = layer.id;
+        renderLayerList();
+        if (!fromServer && roomId) {
+            window.socket.emit('oekaki:layer:create', { room: roomId, layer: layer });
+        }
+        return layer;
+    }
+
+    function deleteActiveLayer() {
+        if (layers.length <= 1) {
+            alert('至少需要保留一个图层');
+            return;
+        }
+        var idx = layers.findIndex(function (l) { return l.id === activeLayerId; });
+        if (idx < 0) return;
+        var deletedId = layers[idx].id;
+        layers.splice(idx, 1);
+        // 删除该图层上的笔触
+        localStrokes = localStrokes.filter(function (s) { return s.layerId !== deletedId; });
+        activeLayerId = layers[Math.min(idx, layers.length - 1)].id;
+        renderLayerList();
+        redrawAllStrokes();
+        if (roomId) {
+            window.socket.emit('oekaki:layer:delete', { room: roomId, id: deletedId });
+        }
+    }
+
+    function setActiveLayer(id, fromServer) {
+        activeLayerId = id;
+        renderLayerList();
+        if (!fromServer && roomId) {
+            window.socket.emit('oekaki:layer:active', { room: roomId, id: id });
+        }
+    }
+
+    function toggleLayerVisible(id, fromServer) {
+        var layer = layers.find(function (l) { return l.id === id; });
+        if (!layer) return;
+        layer.visible = !layer.visible;
+        renderLayerList();
+        redrawAllStrokes();
+        if (!fromServer && roomId) {
+            window.socket.emit('oekaki:layer:visible', { room: roomId, id: id, visible: layer.visible });
+        }
+    }
+
+    function renderLayerList() {
+        var ul = $('oekaki-layer-list');
+        if (!ul) return;
+        ul.innerHTML = '';
+        layers.slice().reverse().forEach(function (layer) {
+            var li = document.createElement('li');
+            li.className = layer.id === activeLayerId ? 'active' : '';
+            var eye = document.createElement('span');
+            eye.className = 'eye' + (layer.visible ? '' : ' hidden');
+            eye.textContent = '👁';
+            eye.addEventListener('click', function (e) {
+                e.stopPropagation();
+                toggleLayerVisible(layer.id);
+            });
+            var name = document.createElement('span');
+            name.textContent = layer.name;
+            name.style.flex = '1';
+            li.appendChild(eye);
+            li.appendChild(name);
+            li.addEventListener('click', function () {
+                setActiveLayer(layer.id);
+            });
+            ul.appendChild(li);
+        });
+    }
+
+    function setLayers(newLayers, newActiveId) {
+        layers = newLayers && newLayers.length ? newLayers : [{ id: generateId('layer'), name: '图层 1', visible: true }];
+        activeLayerId = newActiveId || layers[0].id;
+        renderLayerList();
+        redrawAllStrokes();
+    }
+
+    function getActiveLayerId() {
+        return activeLayerId || (layers[0] && layers[0].id);
+    }
+
+    // ===== 绘制 =====
+
     function drawStroke(from, to, tool, color, size, emit, strokeId, groupId) {
         if (!ctx) return;
+        var layerId = getActiveLayerId();
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
         ctx.lineTo(to.x, to.y);
@@ -212,11 +520,12 @@
         ctx.stroke();
 
         if (emit && roomId) {
-            var id = strokeId || (Date.now() + '_' + Math.random().toString(36).slice(2));
+            var id = strokeId || generateId('stroke');
             var stroke = {
                 id: id,
                 room: roomId,
                 type: 'line',
+                layerId: layerId,
                 groupId: groupId || null,
                 from: from,
                 to: to,
@@ -237,19 +546,20 @@
 
     function drawText(x, y, text, color, size, emit, strokeId) {
         if (!ctx) return;
+        var layerId = getActiveLayerId();
         ctx.font = Math.max(size * 5, 14) + 'px VT323, monospace';
         ctx.fillStyle = color;
         ctx.textBaseline = 'top';
         ctx.fillText(text, x, y);
 
         if (emit && roomId) {
-            var id = strokeId || (Date.now() + '_' + Math.random().toString(36).slice(2));
-            var groupId = Date.now() + '_' + Math.random().toString(36).slice(2);
+            var id = strokeId || generateId('stroke');
             var stroke = {
                 id: id,
                 room: roomId,
                 type: 'text',
-                groupId: groupId,
+                layerId: layerId,
+                groupId: generateId('group'),
                 x: x,
                 y: y,
                 text: text,
@@ -298,7 +608,6 @@
         if (stroke.groupId) {
             window.socket.emit('oekaki:undoGroup', { room: roomId, groupId: stroke.groupId });
         } else {
-            // 兼容无 groupId 的历史笔触（导入或旧数据）
             window.socket.emit('oekaki:undo', { room: roomId, id: stroke.id });
         }
     }
@@ -316,7 +625,10 @@
     function redrawAllStrokes() {
         if (!ctx) return;
         clearCanvas();
-        localStrokes.forEach(renderStroke);
+        layers.forEach(function (layer) {
+            if (!layer.visible) return;
+            localStrokes.filter(function (s) { return s.layerId === layer.id; }).forEach(renderStroke);
+        });
     }
 
     function replayStrokes() {
@@ -335,13 +647,15 @@
             }
             renderStroke(localStrokes[i]);
             i++;
-        }, 30); // 约 33fps 回放
+        }, 30);
     }
 
     function exportStrokes() {
         var data = {
-            version: 1,
+            version: 2,
             canvas: { width: canvas.width, height: canvas.height },
+            layers: layers,
+            activeLayerId: activeLayerId,
             strokes: localStrokes
         };
         var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -363,7 +677,7 @@
                     alert('导入失败：文件格式不正确');
                     return;
                 }
-                importStrokes(data.strokes);
+                importProcess(data);
             } catch (err) {
                 alert('导入失败：' + err.message);
             }
@@ -372,18 +686,36 @@
         reader.readAsText(file);
     }
 
-    function importStrokes(strokes) {
-        // 给导入的笔触重新生成 id，避免与现有 id 冲突
-        var imported = strokes.map(function (s) {
+    function importProcess(data) {
+        var importedLayers = data.layers && data.layers.length ? data.layers : [{ id: generateId('layer'), name: '导入图层', visible: true }];
+        var idMap = {};
+        importedLayers.forEach(function (l) {
+            var newId = generateId('layer');
+            idMap[l.id] = newId;
+            l.id = newId;
+        });
+
+        var importedStrokes = data.strokes.map(function (s) {
             var copy = JSON.parse(JSON.stringify(s));
-            copy.id = Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + (s.id || '');
+            copy.id = generateId('stroke') + '_' + (s.id || '');
             copy.room = roomId;
+            copy.layerId = idMap[s.layerId] || importedLayers[0].id;
             return copy;
         });
-        localStrokes = localStrokes.concat(imported);
+
+        layers = layers.concat(importedLayers);
+        localStrokes = localStrokes.concat(importedStrokes);
+        activeLayerId = importedLayers[importedLayers.length - 1].id;
+        renderLayerList();
         redrawAllStrokes();
+
         if (roomId) {
-            window.socket.emit('oekaki:import', { room: roomId, strokes: imported });
+            window.socket.emit('oekaki:import', {
+                room: roomId,
+                layers: importedLayers,
+                strokes: importedStrokes,
+                activeLayerId: activeLayerId
+            });
         }
     }
 
@@ -402,6 +734,8 @@
         $('oekaki-room-id').textContent = '#' + id;
         bindCanvas();
         bindTools();
+        bindColorWheel();
+        initLayers();
         bindKeys();
         clearCanvas();
         localStrokes = [];
@@ -431,6 +765,8 @@
         roomId = null;
         chatRoom = null;
         localStrokes = [];
+        layers = [];
+        activeLayerId = null;
         $('oekaki-room-view').style.display = 'none';
         $('oekaki-lobby').style.display = 'block';
         $('oekaki-users').innerHTML = '';
@@ -456,6 +792,11 @@
         window.socket.off('oekaki:undo');
         window.socket.off('oekaki:undoGroup');
         window.socket.off('oekaki:color');
+        window.socket.off('oekaki:layer:create');
+        window.socket.off('oekaki:layer:delete');
+        window.socket.off('oekaki:layer:active');
+        window.socket.off('oekaki:layer:visible');
+        window.socket.off('oekaki:layers');
         window.socket.off('oekaki:import');
         window.socket.off('oekaki:clear');
         window.socket.off('oekaki:users');
@@ -468,7 +809,6 @@
         });
         window.socket.on('oekaki:stroke', function (data) {
             if (data.room !== roomId) return;
-            // 避免重复添加自己发出的笔触
             var exists = localStrokes.some(function (s) { return s.id === data.id; });
             if (!exists) localStrokes.push(data);
             renderStroke(data);
@@ -485,13 +825,52 @@
             if (data.room !== roomId) return;
             setColor(data.color, false);
         });
+        window.socket.on('oekaki:layer:create', function (data) {
+            if (data.room !== roomId || !data.layer) return;
+            createLayer(data.layer.name, true);
+        });
+        window.socket.on('oekaki:layer:delete', function (data) {
+            if (data.room !== roomId) return;
+            var idx = layers.findIndex(function (l) { return l.id === data.id; });
+            if (idx < 0) return;
+            layers.splice(idx, 1);
+            localStrokes = localStrokes.filter(function (s) { return s.layerId !== data.id; });
+            if (activeLayerId === data.id) activeLayerId = layers[0] && layers[0].id;
+            renderLayerList();
+            redrawAllStrokes();
+        });
+        window.socket.on('oekaki:layer:active', function (data) {
+            if (data.room !== roomId) return;
+            activeLayerId = data.id;
+            renderLayerList();
+        });
+        window.socket.on('oekaki:layer:visible', function (data) {
+            if (data.room !== roomId) return;
+            var layer = layers.find(function (l) { return l.id === data.id; });
+            if (!layer) return;
+            layer.visible = data.visible;
+            renderLayerList();
+            redrawAllStrokes();
+        });
+        window.socket.on('oekaki:layers', function (data) {
+            if (data.room !== roomId) return;
+            setLayers(data.layers, data.activeLayerId);
+        });
         window.socket.on('oekaki:import', function (data) {
             if (data.room !== roomId || !Array.isArray(data.strokes)) return;
+            if (data.layers) {
+                data.layers.forEach(function (l) {
+                    if (!layers.some(function (existing) { return existing.id === l.id; })) {
+                        layers.push(l);
+                    }
+                });
+            }
             data.strokes.forEach(function (s) {
                 if (!localStrokes.some(function (ls) { return ls.id === s.id; })) {
                     localStrokes.push(s);
                 }
             });
+            renderLayerList();
             redrawAllStrokes();
         });
         window.socket.on('oekaki:clear', function (data) {
@@ -522,6 +901,7 @@
             $('oekaki-room-view').style.display = 'block';
             $('oekaki-room-id').textContent = '#' + roomId;
             bindCanvas();
+            bindColorWheel();
             window.socket.emit('oekaki:rejoin', { room: roomId });
             if (chatRoom) {
                 chatRoom.roomId = roomId;

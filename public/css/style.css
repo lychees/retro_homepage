@@ -533,7 +533,7 @@ input[type="text"]:focus, select:focus {
 /* ===== 茶绘 ===== */
 .oekaki-layout {
     display: grid;
-    grid-template-columns: 80px 1fr 220px;
+    grid-template-columns: 180px 1fr 240px;
     gap: 16px;
     height: 560px;
 }
@@ -542,11 +542,112 @@ input[type="text"]:focus, select:focus {
     background: rgba(20, 20, 45, 0.8);
     border: 1px solid #5555aa;
     border-radius: 4px;
-    padding: 12px 8px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
+}
+
+.tool-row {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+}
+
+.color-wheel-title,
+.brush-title {
+    font-size: 14px;
+    color: #aaaaff;
+    margin-top: 4px;
+}
+
+.color-wheel {
+    width: 140px;
+    height: 140px;
+    border: 1px solid #5555aa;
+    border-radius: 50%;
+    cursor: crosshair;
+    background: #1a1a3e;
+}
+
+.current-color-box {
+    width: 100%;
+    height: 24px;
+    border: 1px solid #5555aa;
+    border-radius: 3px;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+}
+
+.oekaki-right {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+}
+
+.oekaki-layers {
+    background: rgba(20, 20, 45, 0.8);
+    border: 1px solid #5555aa;
+    border-radius: 4px;
+    padding: 10px;
+    flex: 0 0 180px;
+    display: flex;
+    flex-direction: column;
+}
+
+.oekaki-layers h4 {
+    margin: 0 0 8px 0;
+    color: #00ffff;
+}
+
+.layer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
+    overflow-y: auto;
+    font-size: 14px;
+}
+
+.layer-list li {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    background: rgba(40, 40, 80, 0.5);
+    border: 1px solid #444477;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #ccccff;
+}
+
+.layer-list li.active {
+    border-color: #00ffff;
+    background: rgba(0, 255, 255, 0.12);
+}
+
+.layer-list li .eye {
+    cursor: pointer;
+    opacity: 0.7;
+}
+
+.layer-list li .eye.hidden {
+    opacity: 0.3;
+    text-decoration: line-through;
+}
+
+.layer-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.layer-actions .btn.small {
+    flex: 1;
+    padding: 4px 6px;
+    font-size: 13px;
 }
 
 .color-swatch {

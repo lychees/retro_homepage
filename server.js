@@ -95,6 +95,8 @@ function getRoom(type, roomId, password) {
         if (type === 'oekaki') {
             base.oekaki = [];
             base.currentColor = '#000000';
+            base.layers = [{ id: 'layer_' + Date.now(), name: '图层 1', visible: true }];
+            base.activeLayerId = base.layers[0].id;
         }
         rooms[key] = base;
     }
@@ -407,6 +409,11 @@ io.on('connection', (socket) => {
                 users: Array.from(rooms[key].users.values())
             });
             socket.emit('oekaki:color', { room: roomId, color: rooms[key].currentColor });
+            socket.emit('oekaki:layers', {
+                room: roomId,
+                layers: rooms[key].layers,
+                activeLayerId: rooms[key].activeLayerId
+            });
             rooms[key].oekaki.forEach(stroke => socket.emit('oekaki:stroke', stroke));
         }
     });
@@ -420,9 +427,13 @@ io.on('connection', (socket) => {
             id: data.id || (Date.now() + '_' + Math.random().toString(36).slice(2)),
             room: roomId,
             type: data.type || 'line',
+            layerId: data.layerId || (room.layers[0] && room.layers[0].id),
             groupId: data.groupId || null,
             from: data.from,
             to: data.to,
+            x: data.x,
+            y: data.y,
+            text: data.text,
             tool: data.tool,
             color: data.color,
             size: data.size
@@ -476,11 +487,68 @@ io.on('connection', (socket) => {
         const key = `oekaki:${roomId}`;
         const room = rooms[key];
         if (!room || !Array.isArray(data.strokes)) return;
+        if (data.layers) {
+            room.layers = room.layers.concat(data.layers);
+        }
         room.oekaki = room.oekaki.concat(data.strokes);
         if (room.oekaki.length > 5000) {
             room.oekaki = room.oekaki.slice(room.oekaki.length - 5000);
         }
-        socket.to(key).emit('oekaki:import', { room: roomId, strokes: data.strokes });
+        socket.to(key).emit('oekaki:import', {
+            room: roomId,
+            layers: data.layers,
+            strokes: data.strokes,
+            activeLayerId: data.activeLayerId
+        });
+    });
+    socket.on('oekaki:layers', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !Array.isArray(data.layers)) return;
+        room.layers = data.layers;
+        room.activeLayerId = data.activeLayerId || room.layers[0].id;
+        io.to(key).emit('oekaki:layers', {
+            room: roomId,
+            layers: room.layers,
+            activeLayerId: room.activeLayerId
+        });
+    });
+    socket.on('oekaki:layer:create', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.layer) return;
+        room.layers.push(data.layer);
+        socket.to(key).emit('oekaki:layer:create', { room: roomId, layer: data.layer });
+    });
+    socket.on('oekaki:layer:delete', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.id) return;
+        room.layers = room.layers.filter(l => l.id !== data.id);
+        room.oekaki = room.oekaki.filter(s => s.layerId !== data.id);
+        io.to(key).emit('oekaki:layer:delete', { room: roomId, id: data.id });
+    });
+    socket.on('oekaki:layer:active', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.id) return;
+        room.activeLayerId = data.id;
+        socket.to(key).emit('oekaki:layer:active', { room: roomId, id: data.id });
+    });
+    socket.on('oekaki:layer:visible', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.id) return;
+        const layer = room.layers.find(l => l.id === data.id);
+        if (layer) {
+            layer.visible = !!data.visible;
+            io.to(key).emit('oekaki:layer:visible', { room: roomId, id: data.id, visible: layer.visible });
+        }
     });
 
     // ===== FC 游戏室 =====
