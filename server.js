@@ -304,6 +304,8 @@ function endPictionaryTurn(room, key, reason) {
         room.turnTimer = null;
     }
     room.status = 'reveal';
+    room.strokes = [];
+    io.to(key).emit('pictionary:clear', { room: room.id });
     broadcastPictionaryState(room, key);
     const reasonText = reason === 'timeout' ? '时间到' : (reason === 'all' ? '全部猜对' : '作画者离开');
     io.to(key).emit('pictionary:message', {
