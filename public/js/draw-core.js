@@ -41,6 +41,15 @@
         this.maxZoom = 4;
         this.zoomStep = 0.1;
 
+        this.selection = null;
+        this.selecting = false;
+        this.movingSelection = false;
+        this.moveStart = null;
+        this.moveOffset = null;
+        this.selectionImageData = null;
+        this.selectionOverlay = null;
+        this.selectionPreview = null;
+
         this.colorPresets = this.options.colorPresets || DEFAULT_PRESETS;
         this.activePresetIndex = this.options.activePresetIndex != null ? this.options.activePresetIndex : -1;
 
@@ -76,6 +85,11 @@
                 '<div class="tool-btn" data-tool="eraser" title="橡皮">🧼</div>' +
                 '<div class="tool-btn" data-tool="text" title="文字">T</div>' +
                 '<div class="tool-btn" data-tool="eyedropper" title="取色器">💧</div>' +
+                '<div class="tool-btn" data-tool="select" title="区域选择">⛶</div>' +
+            '</div>' +
+            '<div class="selection-actions-row" style="display:none;">' +
+                '<button class="btn small select-clear-btn" title="清除选中区域">🗑️ 清除</button>' +
+                '<button class="btn small select-deselect-btn" title="取消选择">✖</button>' +
             '</div>' +
             '<div class="tool-btn draw-clear-btn" title="清空" style="width:100%;margin-top:6px;">🗑️ 清空</div>' +
 
@@ -149,6 +163,9 @@
         this.els.zoomIn = root.querySelector('.zoom-in');
         this.els.zoomReset = root.querySelector('.zoom-reset');
         this.els.zoomValue = root.querySelector('.zoom-value');
+        this.els.selectionActions = root.querySelector('.selection-actions-row');
+        this.els.selectClearBtn = root.querySelector('.select-clear-btn');
+        this.els.selectDeselectBtn = root.querySelector('.select-deselect-btn');
 
         this.wheelCanvas = this.els.colorWheel;
         this.wheelCtx = this.wheelCanvas ? this.wheelCanvas.getContext('2d') : null;
@@ -166,9 +183,16 @@
             btn.addEventListener('click', function () {
                 tools.forEach(function (b) { b.classList.remove('active'); });
                 btn.classList.add('active');
+                var prevTool = self.currentTool;
                 self.currentTool = btn.getAttribute('data-tool');
                 if (self.els.textSizeRow) {
                     self.els.textSizeRow.style.display = self.currentTool === 'text' ? 'block' : 'none';
+                }
+                if (self.els.selectionActions) {
+                    self.els.selectionActions.style.display = self.currentTool === 'select' ? 'flex' : 'none';
+                }
+                if (prevTool === 'select' && self.currentTool !== 'select') {
+                    self.deselect();
                 }
             });
         });
@@ -237,6 +261,20 @@
         if (this.els.zoomReset && !this.els.zoomReset._bound) {
             this.els.zoomReset._bound = true;
             this.els.zoomReset.addEventListener('click', function () { self.resetZoom(); });
+        }
+
+        if (this.els.selectClearBtn && !this.els.selectClearBtn._bound) {
+            this.els.selectClearBtn._bound = true;
+            this.els.selectClearBtn.addEventListener('click', function () {
+                if (self.readOnly) return;
+                self.clearSelection();
+            });
+        }
+        if (this.els.selectDeselectBtn && !this.els.selectDeselectBtn._bound) {
+            this.els.selectDeselectBtn._bound = true;
+            this.els.selectDeselectBtn.addEventListener('click', function () {
+                self.deselect();
+            });
         }
     };
 
@@ -398,12 +436,19 @@
 
     DrawCanvas.prototype.setActiveTool = function (tool) {
         if (!this.toolbar) return;
+        var prevTool = this.currentTool;
         this.toolbar.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
         var btn = this.toolbar.querySelector('[data-tool="' + tool + '"]');
         if (btn) btn.classList.add('active');
         this.currentTool = tool;
         if (this.els.textSizeRow) {
             this.els.textSizeRow.style.display = tool === 'text' ? 'block' : 'none';
+        }
+        if (this.els.selectionActions) {
+            this.els.selectionActions.style.display = tool === 'select' ? 'flex' : 'none';
+        }
+        if (prevTool === 'select' && tool !== 'select') {
+            this.deselect();
         }
     };
 
@@ -448,7 +493,7 @@
         this.readOnly = !!readOnly;
         if (!this.toolbar) return;
         var self = this;
-        this.toolbar.querySelectorAll('.tool-btn, .draw-clear-btn, .color-preset, .brush-size span, .rgba-inputs input, .alpha-slider, .brush-size-input, .text-size-input').forEach(function (el) {
+        this.toolbar.querySelectorAll('.tool-btn, .draw-clear-btn, .color-preset, .brush-size span, .rgba-inputs input, .alpha-slider, .brush-size-input, .text-size-input, .selection-actions-row .btn').forEach(function (el) {
             el.disabled = self.readOnly;
             el.style.opacity = self.readOnly ? '0.5' : '';
             el.style.pointerEvents = self.readOnly ? 'none' : '';
@@ -480,6 +525,7 @@
         if (this.els.zoomValue) {
             this.els.zoomValue.textContent = Math.round(this.zoom * 100) + '%';
         }
+        this.updateSelectionOverlay();
     };
 
     DrawCanvas.prototype.zoomIn = function () {
@@ -492,6 +538,159 @@
 
     DrawCanvas.prototype.resetZoom = function () {
         this.setZoom(1);
+    };
+
+    DrawCanvas.prototype.ensureSelectionOverlay = function () {
+        if (this.selectionOverlay) return;
+        if (!this.canvas || !this.canvas.parentNode) return;
+        var overlay = document.createElement('div');
+        overlay.className = 'draw-selection-overlay';
+        overlay.style.display = 'none';
+        overlay.style.pointerEvents = 'none';
+        this.canvas.parentNode.appendChild(overlay);
+        this.selectionOverlay = overlay;
+        this.selectionPreview = document.createElement('canvas');
+    };
+
+    DrawCanvas.prototype.updateSelectionOverlay = function () {
+        if (!this.selectionOverlay) return;
+        if (!this.selection || (this.selection.w <= 0 && this.selection.h <= 0)) {
+            this.selectionOverlay.style.display = 'none';
+            return;
+        }
+        var cRect = this.canvas.getBoundingClientRect();
+        var pRect = this.canvas.parentNode.getBoundingClientRect();
+        var scaleX = cRect.width / this.canvas.width;
+        var scaleY = cRect.height / this.canvas.height;
+        var x = this.selection.x * scaleX + (cRect.left - pRect.left);
+        var y = this.selection.y * scaleY + (cRect.top - pRect.top);
+        var w = this.selection.w * scaleX;
+        var h = this.selection.h * scaleY;
+        this.selectionOverlay.style.display = 'block';
+        this.selectionOverlay.style.left = x + 'px';
+        this.selectionOverlay.style.top = y + 'px';
+        this.selectionOverlay.style.width = w + 'px';
+        this.selectionOverlay.style.height = h + 'px';
+    };
+
+    DrawCanvas.prototype.normalizeSelection = function (a, b) {
+        var x1 = Math.max(0, Math.min(this.canvas.width, Math.min(a.x, b.x)));
+        var y1 = Math.max(0, Math.min(this.canvas.height, Math.min(a.y, b.y)));
+        var x2 = Math.max(0, Math.min(this.canvas.width, Math.max(a.x, b.x)));
+        var y2 = Math.max(0, Math.min(this.canvas.height, Math.max(a.y, b.y)));
+        return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+    };
+
+    DrawCanvas.prototype.pointInSelection = function (pos) {
+        if (!this.selection) return false;
+        return pos.x >= this.selection.x && pos.x <= this.selection.x + this.selection.w &&
+               pos.y >= this.selection.y && pos.y <= this.selection.y + this.selection.h;
+    };
+
+    DrawCanvas.prototype.startSelection = function (pos) {
+        this.deselect();
+        this.selecting = true;
+        this.selectionStart = pos;
+        this.selection = { x: pos.x, y: pos.y, w: 0, h: 0 };
+        this.ensureSelectionOverlay();
+        this.updateSelectionOverlay();
+    };
+
+    DrawCanvas.prototype.updateSelection = function (pos) {
+        if (!this.selecting || !this.selectionStart) return;
+        this.selection = this.normalizeSelection(this.selectionStart, pos);
+        this.updateSelectionOverlay();
+    };
+
+    DrawCanvas.prototype.finishSelection = function () {
+        this.selecting = false;
+        this.selectionStart = null;
+        if (!this.selection || this.selection.w < 2 || this.selection.h < 2) {
+            this.deselect();
+            return;
+        }
+        this.updateSelectionOverlay();
+    };
+
+    DrawCanvas.prototype.startMoveSelection = function (pos) {
+        if (!this.selection || !this.ctx) return;
+        this.movingSelection = true;
+        this.moveStart = pos;
+        this.moveOffset = { x: 0, y: 0 };
+        this.moveOriginalSelection = { x: this.selection.x, y: this.selection.y, w: this.selection.w, h: this.selection.h };
+        try {
+            this.selectionImageData = this.ctx.getImageData(Math.floor(this.selection.x), Math.floor(this.selection.y), Math.ceil(this.selection.w), Math.ceil(this.selection.h));
+            this.selectionPreview.width = this.selectionImageData.width;
+            this.selectionPreview.height = this.selectionImageData.height;
+            this.selectionPreview.getContext('2d').putImageData(this.selectionImageData, 0, 0);
+            this.selectionOverlay.style.backgroundImage = 'url(' + this.selectionPreview.toDataURL() + ')';
+            this.selectionOverlay.style.backgroundSize = '100% 100%';
+            this.selectionOverlay.style.backgroundRepeat = 'no-repeat';
+        } catch (e) {
+            this.selectionImageData = null;
+        }
+    };
+
+    DrawCanvas.prototype.updateMoveSelection = function (pos) {
+        if (!this.movingSelection || !this.moveStart || !this.selection) return;
+        this.moveOffset = { x: pos.x - this.moveStart.x, y: pos.y - this.moveStart.y };
+        var moved = {
+            x: this.selection.x + this.moveOffset.x,
+            y: this.selection.y + this.moveOffset.y,
+            w: this.selection.w,
+            h: this.selection.h
+        };
+        this.selection = moved;
+        this.moveStart = pos;
+        this.updateSelectionOverlay();
+    };
+
+    DrawCanvas.prototype.finishMoveSelection = function () {
+        if (!this.movingSelection || !this.selection || !this.ctx) {
+            this.movingSelection = false;
+            return;
+        }
+        var moved = this.moveOriginalSelection && (this.selection.x !== this.moveOriginalSelection.x || this.selection.y !== this.moveOriginalSelection.y);
+        if (moved && this.selectionPreview) {
+            var orig = this.moveOriginalSelection;
+            this.ctx.save();
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(Math.floor(orig.x), Math.floor(orig.y), Math.ceil(orig.w), Math.ceil(orig.h));
+            this.ctx.drawImage(this.selectionPreview, Math.floor(this.selection.x), Math.floor(this.selection.y));
+            this.ctx.restore();
+        }
+        this.movingSelection = false;
+        this.moveStart = null;
+        this.moveOffset = null;
+        this.moveOriginalSelection = null;
+        if (this.selectionOverlay) {
+            this.selectionOverlay.style.backgroundImage = '';
+        }
+        this.selectionImageData = null;
+        this.updateSelectionOverlay();
+    };
+
+    DrawCanvas.prototype.clearSelection = function () {
+        if (!this.selection || !this.ctx || this.readOnly) return;
+        this.ctx.save();
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillRect(Math.floor(this.selection.x), Math.floor(this.selection.y), Math.ceil(this.selection.w), Math.ceil(this.selection.h));
+        this.ctx.restore();
+        this.deselect();
+    };
+
+    DrawCanvas.prototype.deselect = function () {
+        this.selection = null;
+        this.selecting = false;
+        this.movingSelection = false;
+        this.moveStart = null;
+        this.moveOffset = null;
+        this.moveOriginalSelection = null;
+        this.selectionImageData = null;
+        if (this.selectionOverlay) {
+            this.selectionOverlay.style.display = 'none';
+            this.selectionOverlay.style.backgroundImage = '';
+        }
     };
 
     DrawCanvas.prototype.bindCanvas = function () {
@@ -521,15 +720,29 @@
                 self.handleTextInput(pos.x, pos.y);
                 return;
             }
+            if (self.currentTool === 'select') {
+                if (self.selection && self.pointInSelection(pos)) {
+                    self.startMoveSelection(pos);
+                } else {
+                    self.startSelection(pos);
+                }
+                return;
+            }
             self.drawing = true;
             self.lastPos = pos;
             self.currentGroupId = generateId('group');
         }
 
         function move(e) {
-            if (!self.drawing || self.readOnly) return;
+            if (self.readOnly) return;
             e.preventDefault();
             var pos = getPos(e);
+            if (self.currentTool === 'select') {
+                if (self.selecting) self.updateSelection(pos);
+                else if (self.movingSelection) self.updateMoveSelection(pos);
+                return;
+            }
+            if (!self.drawing) return;
             var stroke = {
                 id: generateId('stroke'),
                 layerId: self.layerId,
@@ -547,6 +760,11 @@
         }
 
         function end() {
+            if (self.currentTool === 'select') {
+                if (self.selecting) self.finishSelection();
+                else if (self.movingSelection) self.finishMoveSelection();
+                return;
+            }
             self.drawing = false;
             self.lastPos = null;
             self.currentGroupId = null;
@@ -563,6 +781,20 @@
             if (e.deltaY < 0) self.zoomIn();
             else self.zoomOut();
         }, { passive: false });
+
+        if (!this._selectKeysBound) {
+            this._selectKeysBound = true;
+            document.addEventListener('keydown', function (e) {
+                if (self.currentTool !== 'select' || !self.selection) return;
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.preventDefault();
+                    self.clearSelection();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    self.deselect();
+                }
+            });
+        }
     };
 
     DrawCanvas.prototype.handleTextInput = function (x, y) {

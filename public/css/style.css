@@ -811,6 +811,29 @@ input[type="text"]:focus, select:focus {
     box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
 }
 
+.selection-actions-row {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.draw-selection-overlay {
+    position: absolute;
+    border: 1px dashed #00ffff;
+    background: rgba(0, 255, 255, 0.08);
+    box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+    animation: marching-ants 1s linear infinite;
+    pointer-events: none;
+    z-index: 10;
+}
+
+@keyframes marching-ants {
+    0% { background-position: 0 0, 16px 100%, 0 16px, 100% 0; }
+    100% { background-position: 16px 0, 0 100%, 0 0, 100% 16px; }
+}
+
 .color-picker {
     width: 36px;
     height: 36px;
