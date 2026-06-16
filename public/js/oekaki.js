@@ -8,42 +8,14 @@
     var roomId = null;
     var nick = '';
     var canvas, ctx;
-    var drawing = false;
-    var currentTool = 'pen';
-    var currentColor = '#000000';
-    var currentAlpha = 1;
-    var currentSize = 4;
-    var currentFont = '20px VT323, monospace';
-    var lastPos = null;
-    var currentGroupId = null;
     var chatRoom = null;
     var localStrokes = [];
     var replayTimer = null;
+    var drawCore = null;
 
     // 图层
     var layers = [];
     var activeLayerId = null;
-
-    // 调色环
-    var wheelCanvas, wheelCtx;
-    var wheelDragging = false;
-    var wheelHue = 0;
-    var wheelSat = 0;
-    var wheelVal = 0;
-
-    // 常用颜色
-    var maxPresets = 8;
-    var activePresetIndex = 0;
-    var colorPresets = [
-        { color: '#000000', alpha: 1 },
-        { color: '#ffffff', alpha: 1 },
-        { color: '#ff0000', alpha: 1 },
-        { color: '#00ff00', alpha: 1 },
-        { color: '#0000ff', alpha: 1 },
-        { color: '#ffff00', alpha: 1 },
-        { color: '#ff00ff', alpha: 1 },
-        { color: '#00ffff', alpha: 1 }
-    ];
 
     function $(id) { return document.getElementById(id); }
 
@@ -71,9 +43,7 @@
         if (clearBtn && !clearBtn._bound) {
             clearBtn._bound = true;
             clearBtn.addEventListener('click', function () {
-                clearCanvas();
-                localStrokes = [];
-                if (roomId) window.socket.emit('oekaki:clear', { room: roomId });
+                if (drawCore) drawCore.clear();
             });
         }
         if (leaveBtn && !leaveBtn._bound) {
@@ -121,70 +91,47 @@
         }
     }
 
-    function bindTools() {
-        var tools = document.querySelectorAll('[data-tool]');
-        tools.forEach(function (btn) {
-            if (btn._bound) return;
-            btn._bound = true;
-            btn.addEventListener('click', function () {
-                tools.forEach(function (b) { b.classList.remove('active'); });
-                btn.classList.add('active');
-                currentTool = btn.getAttribute('data-tool');
-            });
+    function initDrawCore() {
+        if (drawCore) return;
+        drawCore = new window.DrawCanvas({
+            canvasId: 'oekaki-canvas',
+            toolbarId: 'oekaki-draw-tools',
+            defaultColor: '#000000',
+            defaultAlpha: 1,
+            defaultSize: 4,
+            defaultTextSize: 20,
+            activePresetIndex: 0,
+            onStroke: function (stroke) {
+                if (!roomId) return;
+                var s = {
+                    id: stroke.id || generateId('stroke'),
+                    room: roomId,
+                    type: stroke.tool === 'text' ? 'text' : 'line',
+                    layerId: stroke.layerId || getActiveLayerId(),
+                    groupId: stroke.groupId || null,
+                    from: stroke.from,
+                    to: stroke.to,
+                    x: stroke.x,
+                    y: stroke.y,
+                    text: stroke.text,
+                    tool: stroke.tool,
+                    color: stroke.color,
+                    alpha: stroke.alpha == null ? 1 : stroke.alpha,
+                    size: stroke.size
+                };
+                localStrokes.push(s);
+                window.socket.emit('oekaki:stroke', s);
+            },
+            onClear: function () {
+                localStrokes = [];
+                if (roomId) window.socket.emit('oekaki:clear', { room: roomId });
+            },
+            onColorChange: function (color, alpha) {
+                overwriteActivePreset(color, alpha);
+                if (roomId) window.socket.emit('oekaki:color', { room: roomId, color: color, alpha: alpha });
+            }
         });
-
-        var sizes = document.querySelectorAll('#brush-sizes span');
-        sizes.forEach(function (s) {
-            if (s._bound) return;
-            s._bound = true;
-            s.addEventListener('click', function () {
-                sizes.forEach(function (x) { x.classList.remove('active'); });
-                s.classList.add('active');
-                currentSize = parseInt(s.getAttribute('data-size'), 10);
-            });
-        });
-
-        var alphaSlider = $('oekaki-alpha');
-        if (alphaSlider && !alphaSlider._bound) {
-            alphaSlider._bound = true;
-            alphaSlider.addEventListener('input', function () {
-                setAlpha(parseInt(alphaSlider.value, 10) / 100, true);
-            });
-        }
-        bindRgbaInputs();
-    }
-
-    function bindRgbaInputs() {
-        var ids = ['oekaki-r', 'oekaki-g', 'oekaki-b'];
-        ids.forEach(function (id) {
-            var input = $(id);
-            if (!input || input._bound) return;
-            input._bound = true;
-            input.addEventListener('input', function () {
-                var r = clampChannel($('oekaki-r').value);
-                var g = clampChannel($('oekaki-g').value);
-                var b = clampChannel($('oekaki-b').value);
-                var hex = rgbToHex(r, g, b);
-                setColor(hex, currentAlpha, true);
-                overwriteActivePreset(hex, currentAlpha);
-            });
-        });
-        var aInput = $('oekaki-a');
-        if (aInput && !aInput._bound) {
-            aInput._bound = true;
-            aInput.addEventListener('input', function () {
-                var a = parseFloat(aInput.value);
-                if (isNaN(a)) return;
-                setAlpha(Math.max(0, Math.min(1, a)), true);
-                overwriteActivePreset(currentColor, currentAlpha);
-            });
-        }
-    }
-
-    function clampChannel(v) {
-        var n = parseInt(v, 10);
-        if (isNaN(n)) return 0;
-        return Math.max(0, Math.min(255, n));
+        drawCore.init();
     }
 
     function bindKeys() {
@@ -204,358 +151,20 @@
         }
     }
 
-    function bindCanvas() {
-        canvas = $('oekaki-canvas');
-        if (!canvas || canvas._bound) return;
-        ctx = canvas.getContext('2d');
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        canvas._bound = true;
-
-        function getPos(e) {
-            var rect = canvas.getBoundingClientRect();
-            var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            var clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (clientX - rect.left) * (canvas.width / rect.width),
-                y: (clientY - rect.top) * (canvas.height / rect.height)
-            };
-        }
-
-        function start(e) {
-            e.preventDefault();
-            var pos = getPos(e);
-            if (currentTool === 'text') {
-                placeText(pos.x, pos.y);
-                return;
-            }
-            if (currentTool === 'eyedropper') {
-                pickColor(pos.x, pos.y);
-                return;
-            }
-            drawing = true;
-            currentGroupId = generateId('group');
-            lastPos = pos;
-        }
-
-        function move(e) {
-            e.preventDefault();
-            if (currentTool === 'text' || currentTool === 'eyedropper' || !drawing || !lastPos) return;
-            var pos = getPos(e);
-            drawStroke(lastPos, pos, currentTool, currentColor, currentSize, currentAlpha, true, null, currentGroupId);
-            lastPos = pos;
-        }
-
-        function end(e) {
-            e.preventDefault();
-            drawing = false;
-            lastPos = null;
-            currentGroupId = null;
-        }
-
-        canvas.addEventListener('mousedown', start);
-        canvas.addEventListener('mousemove', move);
-        canvas.addEventListener('mouseup', end);
-        canvas.addEventListener('mouseleave', end);
-        canvas.addEventListener('touchstart', start, { passive: false });
-        canvas.addEventListener('touchmove', move, { passive: false });
-        canvas.addEventListener('touchend', end, { passive: false });
-    }
-
-    // ===== 颜色工具 =====
-
-    function setColor(color, alpha, emit) {
-        if (typeof alpha === 'number') currentAlpha = Math.max(0, Math.min(1, alpha));
-        currentColor = color;
-        var box = $('oekaki-current-color');
-        if (box) {
-            box.style.background = color;
-            box.style.opacity = currentAlpha;
-        }
-        updateWheelFromColor(color);
-        updateAlphaUI();
-        updateRgbaUI();
-        if (emit && roomId) {
-            window.socket.emit('oekaki:color', { room: roomId, color: color, alpha: currentAlpha });
-        }
-    }
-
-    function setAlpha(alpha, emit) {
-        currentAlpha = Math.max(0, Math.min(1, alpha));
-        var box = $('oekaki-current-color');
-        if (box) box.style.opacity = currentAlpha;
-        updateAlphaUI();
-        updateRgbaUI();
-        if (emit && roomId) {
-            window.socket.emit('oekaki:color', { room: roomId, color: currentColor, alpha: currentAlpha });
-        }
-    }
-
-    function updateAlphaUI() {
-        var slider = $('oekaki-alpha');
-        var label = $('oekaki-alpha-value');
-        if (slider) slider.value = Math.round(currentAlpha * 100);
-        if (label) label.textContent = Math.round(currentAlpha * 100) + '%';
-    }
-
-    function updateRgbaUI() {
-        var rgb = hexToRgb(currentColor) || { r: 0, g: 0, b: 0 };
-        var rInput = $('oekaki-r');
-        var gInput = $('oekaki-g');
-        var bInput = $('oekaki-b');
-        var aInput = $('oekaki-a');
-        var text = $('oekaki-rgba-text');
-        if (rInput) rInput.value = rgb.r;
-        if (gInput) gInput.value = rgb.g;
-        if (bInput) bInput.value = rgb.b;
-        if (aInput) aInput.value = Math.round(currentAlpha * 100) / 100;
-        if (text) text.textContent = 'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', ' + (Math.round(currentAlpha * 100) / 100) + ')';
-    }
-
-    function selectPreset(index) {
-        if (index < 0 || index >= maxPresets || !colorPresets[index]) return;
-        activePresetIndex = index;
-        renderColorPresets();
-        var item = colorPresets[index];
-        setColor(item.color, item.alpha, true);
-        currentTool = 'pen';
-        document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
-        var pen = document.querySelector('[data-tool="pen"]');
-        if (pen) pen.classList.add('active');
-    }
+    // ===== 颜色工具（由 draw-core 提供）=====
 
     function overwriteActivePreset(color, alpha) {
-        if (!color || color[0] !== '#') return;
-        colorPresets[activePresetIndex] = { color: color.toLowerCase(), alpha: alpha == null ? 1 : alpha };
-        renderColorPresets();
+        if (!drawCore || !color || color[0] !== '#') return;
+        var idx = drawCore.activePresetIndex;
+        if (idx < 0 || idx >= drawCore.colorPresets.length) return;
+        drawCore.colorPresets[idx] = { color: color.toLowerCase(), alpha: alpha == null ? 1 : alpha };
+        drawCore.renderColorPresets();
     }
 
-    function renderColorPresets() {
-        var container = $('oekaki-color-presets');
-        if (!container) return;
-        container.innerHTML = '';
-        for (var i = 0; i < maxPresets; i++) {
-            var div = document.createElement('div');
-            var item = colorPresets[i];
-            var classes = ['color-preset'];
-            if (!item) classes.push('empty');
-            if (i === activePresetIndex) classes.push('active');
-            div.className = classes.join(' ');
-            if (item) {
-                div.style.background = item.color;
-                div.style.opacity = item.alpha;
-                div.title = item.color + ' · 不透明度 ' + Math.round(item.alpha * 100) + '%';
-            }
-            div.addEventListener('click', (function (idx) {
-                return function () { selectPreset(idx); };
-            })(i));
-            container.appendChild(div);
-        }
-    }
-
-    function pickColor(x, y) {
-        if (!ctx) return;
-        var pixel = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
-        var hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
-        setColor(hex, pixel[3] / 255, true);
-        overwriteActivePreset(currentColor, currentAlpha);
-        // 取色后自动切回画笔
-        currentTool = 'pen';
-        document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
-        var pen = document.querySelector('[data-tool="pen"]');
-        if (pen) pen.classList.add('active');
-    }
-
-    function rgbToHex(r, g, b) {
-        return '#' + [r, g, b].map(function (v) {
-            var hex = Math.max(0, Math.min(255, v)).toString(16);
-            return hex.length === 1 ? '0' + hex : hex;
-        }).join('');
-    }
-
-    function hsvToRgb(h, s, v) {
-        var r, g, b;
-        var i = Math.floor(h * 6);
-        var f = h * 6 - i;
-        var p = v * (1 - s);
-        var q = v * (1 - f * s);
-        var t = v * (1 - (1 - f) * s);
-        switch (i % 6) {
-            case 0: r = v; g = t; b = p; break;
-            case 1: r = q; g = v; b = p; break;
-            case 2: r = p; g = v; b = t; break;
-            case 3: r = p; g = q; b = v; break;
-            case 4: r = t; g = p; b = v; break;
-            case 5: r = v; g = p; b = q; break;
-        }
-        return {
-            r: Math.round(r * 255),
-            g: Math.round(g * 255),
-            b: Math.round(b * 255)
-        };
-    }
-
-    function rgbToHsv(r, g, b) {
-        r /= 255; g /= 255; b /= 255;
-        var max = Math.max(r, g, b);
-        var min = Math.min(r, g, b);
-        var h, s, v = max;
-        var d = max - min;
-        s = max === 0 ? 0 : d / max;
-        if (max === min) {
-            h = 0;
-        } else {
-            switch (max) {
-                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-                case g: h = (b - r) / d + 2; break;
-                case b: h = (r - g) / d + 4; break;
-            }
-            h /= 6;
-        }
-        return { h: h, s: s, v: v };
-    }
-
-    function updateWheelFromColor(color) {
-        var rgb = hexToRgb(color);
-        if (!rgb) return;
-        var hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-        wheelHue = hsv.h;
-        wheelSat = hsv.s;
-        wheelVal = hsv.v;
-        drawColorWheel();
-    }
-
-    function hexToRgb(hex) {
-        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-            r: parseInt(result[1], 16),
-            g: parseInt(result[2], 16),
-            b: parseInt(result[3], 16)
-        } : null;
-    }
-
-    function bindColorWheel() {
-        wheelCanvas = $('oekaki-color-wheel');
-        if (!wheelCanvas) return;
-        wheelCtx = wheelCanvas.getContext('2d');
-        drawColorWheel();
-
-        function getPos(e) {
-            var rect = wheelCanvas.getBoundingClientRect();
-            var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            var clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (clientX - rect.left) * (wheelCanvas.width / rect.width),
-                y: (clientY - rect.top) * (wheelCanvas.height / rect.height)
-            };
-        }
-
-        function handle(e) {
-            e.preventDefault();
-            var pos = getPos(e);
-            var cx = wheelCanvas.width / 2;
-            var cy = wheelCanvas.height / 2;
-            var dx = pos.x - cx;
-            var dy = pos.y - cy;
-            var dist = Math.sqrt(dx * dx + dy * dy);
-            var outerR = cx - 4;
-            var innerR = outerR * 0.55;
-
-            if (dist >= innerR && dist <= outerR) {
-                // 色相环（与 canvas arc 同方向：顺时针从右侧 0° 开始）
-                var angle = Math.atan2(dy, dx);
-                if (angle < 0) angle += Math.PI * 2;
-                wheelHue = angle / (Math.PI * 2);
-            } else if (dist < innerR) {
-                // SV 三角形（简化为中心三角形）
-                setWheelSVFromPoint(dx, dy, innerR);
-            }
-            updateColorFromWheel(true);
-            drawColorWheel();
-        }
-
-        wheelCanvas.addEventListener('mousedown', function (e) {
-            wheelDragging = true;
-            handle(e);
-        });
-        document.addEventListener('mousemove', function (e) {
-            if (!wheelDragging) return;
-            handle(e);
-        });
-        document.addEventListener('mouseup', function () {
-            wheelDragging = false;
-        });
-        wheelCanvas.addEventListener('touchstart', function (e) {
-            wheelDragging = true;
-            handle(e);
-        }, { passive: false });
-        document.addEventListener('touchmove', function (e) {
-            if (!wheelDragging) return;
-            handle(e);
-        }, { passive: false });
-        document.addEventListener('touchend', function () {
-            wheelDragging = false;
-        });
-    }
-
-    function setWheelSVFromPoint(dx, dy, radius) {
-        // 将内部圆映射到 SV：x -> saturation, y -> value
-        var nx = Math.max(-1, Math.min(1, dx / radius));
-        var ny = Math.max(-1, Math.min(1, dy / radius));
-        wheelSat = (nx + 1) / 2;
-        wheelVal = 1 - (ny + 1) / 2;
-    }
-
-    function updateColorFromWheel(emit) {
-        var rgb = hsvToRgb(wheelHue, wheelSat, wheelVal);
-        var hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-        setColor(hex, currentAlpha, emit);
-        overwriteActivePreset(hex, currentAlpha);
-    }
-
-    function drawColorWheel() {
-        if (!wheelCtx) return;
-        var w = wheelCanvas.width;
-        var h = wheelCanvas.height;
-        var cx = w / 2;
-        var cy = h / 2;
-        var outerR = cx - 4;
-        var innerR = outerR * 0.55;
-
-        wheelCtx.clearRect(0, 0, w, h);
-
-        // 色相环
-        for (var angle = 0; angle < 360; angle++) {
-            var start = (angle - 1) * Math.PI / 180;
-            var end = (angle + 1) * Math.PI / 180;
-            var rgb = hsvToRgb(angle / 360, 1, 1);
-            wheelCtx.beginPath();
-            wheelCtx.arc(cx, cy, outerR, start, end);
-            wheelCtx.arc(cx, cy, innerR, end, start, true);
-            wheelCtx.fillStyle = 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')';
-            wheelCtx.fill();
-        }
-
-        // SV 内圆（当前色相下的饱和/明度）
-        var grad = wheelCtx.createRadialGradient(cx, cy, 0, cx, cy, innerR);
-        var hueRgb = hsvToRgb(wheelHue, 1, 1);
-        grad.addColorStop(0, 'rgb(255,255,255)');
-        grad.addColorStop(0.5, 'rgb(' + hueRgb.r + ',' + hueRgb.g + ',' + hueRgb.b + ')');
-        grad.addColorStop(1, 'rgb(0,0,0)');
-        wheelCtx.beginPath();
-        wheelCtx.arc(cx, cy, innerR, 0, Math.PI * 2);
-        wheelCtx.fillStyle = grad;
-        wheelCtx.fill();
-
-        // 当前选择指示器
-        var rgb = hsvToRgb(wheelHue, wheelSat, wheelVal);
-        wheelCtx.beginPath();
-        wheelCtx.arc(cx, cy, innerR * 0.35, 0, Math.PI * 2);
-        wheelCtx.fillStyle = 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')';
-        wheelCtx.fill();
-        wheelCtx.strokeStyle = '#ffffff';
-        wheelCtx.lineWidth = 2;
-        wheelCtx.stroke();
+    function syncDrawCoreOpacity() {
+        if (!drawCore) return;
+        var layer = layers.find(function (l) { return l.id === activeLayerId; });
+        drawCore.strokeOpacity = layer ? layer.opacity : 1;
     }
 
     // ===== 图层工具 =====
@@ -563,6 +172,8 @@
     function initLayers() {
         layers = [{ id: generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
         activeLayerId = layers[0].id;
+        if (drawCore) drawCore.setLayerId(activeLayerId);
+        syncDrawCoreOpacity();
         renderLayerList();
         bindLayerOpacity();
     }
@@ -571,6 +182,8 @@
         var layer = { id: generateId('layer'), name: name || '新图层', visible: true, opacity: 1 };
         layers.push(layer);
         activeLayerId = layer.id;
+        if (drawCore) drawCore.setLayerId(activeLayerId);
+        syncDrawCoreOpacity();
         renderLayerList();
         updateLayerOpacityUI();
         if (!fromServer && roomId) {
@@ -590,6 +203,8 @@
         layers.splice(idx, 1);
         localStrokes = localStrokes.filter(function (s) { return s.layerId !== deletedId; });
         activeLayerId = layers[Math.min(idx, layers.length - 1)].id;
+        if (drawCore) drawCore.setLayerId(activeLayerId);
+        syncDrawCoreOpacity();
         renderLayerList();
         redrawAllStrokes();
         updateLayerOpacityUI();
@@ -612,6 +227,8 @@
 
     function setActiveLayer(id, fromServer) {
         activeLayerId = id;
+        if (drawCore) drawCore.setLayerId(activeLayerId);
+        syncDrawCoreOpacity();
         renderLayerList();
         updateLayerOpacityUI();
         if (!fromServer && roomId) {
@@ -623,6 +240,7 @@
         var layer = layers.find(function (l) { return l.id === id; });
         if (!layer) return;
         layer.opacity = Math.max(0, Math.min(1, opacity));
+        if (id === activeLayerId) syncDrawCoreOpacity();
         renderLayerList();
         redrawAllStrokes();
         if (id === activeLayerId) updateLayerOpacityUI();
@@ -746,6 +364,8 @@
             };
         }) : [{ id: generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
         activeLayerId = newActiveId || layers[0].id;
+        if (drawCore) drawCore.setLayerId(activeLayerId);
+        syncDrawCoreOpacity();
         renderLayerList();
         updateLayerOpacityUI();
         redrawAllStrokes();
@@ -757,104 +377,14 @@
 
     // ===== 绘制 =====
 
-    function drawStroke(from, to, tool, color, size, alpha, emit, strokeId, groupId) {
-        if (!ctx) return;
-        var layerId = getActiveLayerId();
-        var layer = layers.find(function (l) { return l.id === layerId; });
-        var globalAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = (alpha == null ? 1 : alpha) * (layer ? layer.opacity : 1);
-        ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
-        ctx.lineTo(to.x, to.y);
-        ctx.lineWidth = size;
-        ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-        ctx.stroke();
-        ctx.globalAlpha = globalAlpha;
-
-        if (emit && roomId) {
-            var id = strokeId || generateId('stroke');
-            var stroke = {
-                id: id,
-                room: roomId,
-                type: 'line',
-                layerId: layerId,
-                groupId: groupId || null,
-                from: from,
-                to: to,
-                tool: tool,
-                color: color,
-                alpha: alpha == null ? 1 : alpha,
-                size: size
-            };
-            localStrokes.push(stroke);
-            window.socket.emit('oekaki:stroke', stroke);
-        }
-    }
-
-    function placeText(x, y) {
-        var text = prompt('请输入文字：');
-        if (!text || !text.trim()) return;
-        drawText(x, y, text.trim(), currentColor, currentSize, currentAlpha, true);
-    }
-
-    function drawText(x, y, text, color, size, alpha, emit, strokeId) {
-        if (!ctx) return;
-        var layerId = getActiveLayerId();
-        var layer = layers.find(function (l) { return l.id === layerId; });
-        var globalAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = (alpha == null ? 1 : alpha) * (layer ? layer.opacity : 1);
-        ctx.font = Math.max(size * 5, 14) + 'px VT323, monospace';
-        ctx.fillStyle = color;
-        ctx.textBaseline = 'top';
-        ctx.fillText(text, x, y);
-        ctx.globalAlpha = globalAlpha;
-
-        if (emit && roomId) {
-            var id = strokeId || generateId('stroke');
-            var stroke = {
-                id: id,
-                room: roomId,
-                type: 'text',
-                layerId: layerId,
-                groupId: generateId('group'),
-                x: x,
-                y: y,
-                text: text,
-                color: color,
-                alpha: alpha == null ? 1 : alpha,
-                size: size
-            };
-            localStrokes.push(stroke);
-            window.socket.emit('oekaki:stroke', stroke);
-        }
-    }
-
     function renderStroke(s) {
-        if (!ctx) return;
+        if (!drawCore) return;
         var layer = layers.find(function (l) { return l.id === s.layerId; });
-        var alpha = s.alpha == null ? 1 : s.alpha;
-        var opacity = layer ? layer.opacity : 1;
-        ctx.globalAlpha = alpha * opacity;
-        if (s.type === 'text') {
-            ctx.font = Math.max((s.size || 4) * 5, 14) + 'px VT323, monospace';
-            ctx.fillStyle = s.color;
-            ctx.textBaseline = 'top';
-            ctx.fillText(s.text, s.x, s.y);
-        } else {
-            ctx.beginPath();
-            ctx.moveTo(s.from.x, s.from.y);
-            ctx.lineTo(s.to.x, s.to.y);
-            ctx.lineWidth = s.size;
-            ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
-            ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
+        drawCore.renderStroke(s, layer ? layer.opacity : 1);
     }
 
     function clearCanvas() {
-        if (!ctx) return;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (drawCore) drawCore.clear(true);
     }
 
     function downloadCanvas() {
@@ -998,6 +528,8 @@
         layers = layers.concat(importedLayers);
         localStrokes = localStrokes.concat(importedStrokes);
         activeLayerId = importedLayers[importedLayers.length - 1].id;
+        if (drawCore) drawCore.setLayerId(activeLayerId);
+        syncDrawCoreOpacity();
         renderLayerList();
         updateLayerOpacityUI();
         redrawAllStrokes();
@@ -1025,13 +557,12 @@
         $('oekaki-lobby').style.display = 'none';
         $('oekaki-room-view').style.display = 'block';
         $('oekaki-room-id').textContent = '#' + id;
-        bindCanvas();
-        bindTools();
-        bindColorWheel();
+        initDrawCore();
+        canvas = drawCore.canvas;
+        ctx = drawCore.ctx;
         initLayers();
         bindKeys();
-        renderColorPresets();
-        clearCanvas();
+        drawCore.clear(true);
         localStrokes = [];
         updateUsers(users || []);
         if (!chatRoom) {
@@ -1120,7 +651,7 @@
         });
         window.socket.on('oekaki:color', function (data) {
             if (data.room !== roomId) return;
-            setColor(data.color, data.alpha, false);
+            if (drawCore) drawCore.setColor(data.color, data.alpha);
         });
         window.socket.on('oekaki:layer:create', function (data) {
             if (data.room !== roomId || !data.layer) return;
@@ -1133,6 +664,7 @@
             layers.splice(idx, 1);
             localStrokes = localStrokes.filter(function (s) { return s.layerId !== data.id; });
             if (activeLayerId === data.id) activeLayerId = layers[0] && layers[0].id;
+            if (drawCore) drawCore.setLayerId(activeLayerId);
             renderLayerList();
             updateLayerOpacityUI();
             redrawAllStrokes();
@@ -1147,6 +679,7 @@
         window.socket.on('oekaki:layer:active', function (data) {
             if (data.room !== roomId) return;
             activeLayerId = data.id;
+            if (drawCore) drawCore.setLayerId(activeLayerId);
             renderLayerList();
             updateLayerOpacityUI();
         });
@@ -1163,6 +696,7 @@
             var layer = layers.find(function (l) { return l.id === data.id; });
             if (!layer) return;
             layer.opacity = data.opacity;
+            if (data.id === activeLayerId) syncDrawCoreOpacity();
             renderLayerList();
             if (data.id === activeLayerId) updateLayerOpacityUI();
             redrawAllStrokes();
@@ -1207,7 +741,6 @@
 
     window.initOekaki = function () {
         bindOnce();
-        bindTools();
         initSocketListeners();
 
         var query = window.currentQuery || {};
@@ -1222,9 +755,9 @@
             $('oekaki-lobby').style.display = 'none';
             $('oekaki-room-view').style.display = 'block';
             $('oekaki-room-id').textContent = '#' + roomId;
-            bindCanvas();
-            bindColorWheel();
-            renderColorPresets();
+            initDrawCore();
+            canvas = drawCore.canvas;
+            ctx = drawCore.ctx;
             window.socket.emit('oekaki:rejoin', { room: roomId });
             if (chatRoom) {
                 chatRoom.roomId = roomId;

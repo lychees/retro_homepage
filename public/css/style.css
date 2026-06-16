@@ -547,6 +547,7 @@ input[type="text"]:focus, select:focus {
     flex-direction: column;
     gap: 8px;
     align-items: center;
+    overflow-y: auto;
 }
 
 .tool-row {
@@ -864,6 +865,7 @@ input[type="text"]:focus, select:focus {
     flex-direction: column;
     gap: 8px;
     align-items: center;
+    overflow-y: auto;
 }
 
 .pictionary-canvas-area {
@@ -935,6 +937,36 @@ input[type="text"]:focus, select:focus {
     font-size: 12px;
     color: #8888cc;
     margin-bottom: 4px;
+}
+
+.draw-tools {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.size-input-row,
+.text-size-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    font-size: 13px;
+    color: #aaaaff;
+}
+
+.size-input-row input[type="number"],
+.text-size-row input[type="number"] {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 14px;
+    color: #e0e0ff;
+    background: rgba(20, 20, 50, 0.8);
+    border: 1px solid #5555aa;
+    border-radius: 3px;
+    text-align: center;
 }
 
 .pictionary-word-box .word-content {
