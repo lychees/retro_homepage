@@ -166,6 +166,7 @@
                 var b = clampChannel($('oekaki-b').value);
                 var hex = rgbToHex(r, g, b);
                 setColor(hex, currentAlpha, true);
+                overwriteActivePreset(hex, currentAlpha);
             });
         });
         var aInput = $('oekaki-a');
@@ -175,6 +176,7 @@
                 var a = parseFloat(aInput.value);
                 if (isNaN(a)) return;
                 setAlpha(Math.max(0, Math.min(1, a)), true);
+                overwriteActivePreset(currentColor, currentAlpha);
             });
         }
     }
