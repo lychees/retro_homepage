@@ -51,8 +51,8 @@
         rooms.forEach(function (r) {
             var card = document.createElement('div');
             card.className = 'room-card';
-            var icon = r.type === 'chat' ? '💬' : r.type === 'oekaki' ? '🎨' : '🎮';
-            var typeName = r.type === 'chat' ? '聊天室' : r.type === 'oekaki' ? '茶绘房间' : 'FC 游戏室';
+            var icon = r.type === 'chat' ? '💬' : r.type === 'oekaki' ? '🎨' : r.type === 'pictionary' ? '🖍️' : '🎮';
+            var typeName = r.type === 'chat' ? '聊天室' : r.type === 'oekaki' ? '茶绘房间' : r.type === 'pictionary' ? '你画我猜' : 'FC 游戏室';
             var lock = r.hasPwd ? '🔒 ' : '';
             card.innerHTML =
                 '<div class="icon" style="color:#00ffff">' + icon + '</div>' +

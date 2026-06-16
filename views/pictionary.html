@@ -1,0 +1,79 @@
+<div class="card">
+    <div id="pictionary-lobby">
+        <h2>◇ 你画我猜</h2>
+        <p>一人作画，其他人根据画的内容猜词。猜对得分！</p>
+        <div class="form-row">
+            <label>昵称：</label>
+            <input type="text" id="pictionary-nick" placeholder="小画家" maxlength="16">
+        </div>
+        <div class="form-row">
+            <label>房间号：</label>
+            <input type="text" id="pictionary-room" placeholder="留空则创建新房间" maxlength="16">
+        </div>
+        <div class="form-row">
+            <label>密码：</label>
+            <input type="password" id="pictionary-pwd" placeholder="公开房请留空" maxlength="16">
+        </div>
+        <div class="form-row">
+            <button class="btn secondary" id="pictionary-create">创建 / 加入房间</button>
+        </div>
+    </div>
+
+    <div id="pictionary-room-view" style="display:none;">
+        <div class="room-header">
+            <h2>🎨 你画我猜 <span id="pictionary-room-id"></span></h2>
+            <div class="room-info">在线人数：<span id="pictionary-online">0</span></div>
+        </div>
+        <div class="pictionary-layout">
+            <div class="pictionary-tools">
+                <div class="tool-row">
+                    <div class="tool-btn active" data-tool="pen" title="画笔">✏️</div>
+                    <div class="tool-btn" data-tool="eraser" title="橡皮">🧼</div>
+                </div>
+                <div class="tool-btn" id="pictionary-clear" title="清空画板" style="width:100%;margin-top:6px;">🗑️ 清空</div>
+
+                <div class="color-wheel-title">颜色</div>
+                <div class="color-presets" id="pictionary-color-presets"></div>
+
+                <div class="brush-title">粗细</div>
+                <div class="brush-size" id="pictionary-brush-sizes">
+                    <span style="width:4px;height:4px;" data-size="2"></span>
+                    <span style="width:8px;height:8px;" data-size="4" class="active"></span>
+                    <span style="width:12px;height:12px;" data-size="8"></span>
+                    <span style="width:18px;height:18px;" data-size="16"></span>
+                </div>
+
+                <div class="pictionary-word-box" id="pictionary-word-box" style="margin-top:12px;">
+                    <div class="word-label">当前题目</div>
+                    <div class="word-content" id="pictionary-word">等待开始…</div>
+                </div>
+                <div class="pictionary-timer" id="pictionary-timer">--</div>
+                <button class="btn secondary" id="pictionary-start" style="width:100%;margin-top:8px;">开始游戏</button>
+            </div>
+            <div class="pictionary-canvas-area">
+                <canvas id="pictionary-canvas" class="pictionary-canvas" width="640" height="480"></canvas>
+                <div class="pictionary-status" id="pictionary-status">等待房主开始游戏</div>
+            </div>
+            <div class="pictionary-right">
+                <div class="pictionary-users">
+                    <h4>玩家得分</h4>
+                    <ul class="user-list" id="pictionary-users"></ul>
+                </div>
+                <div class="pictionary-chat">
+                    <h4>房间消息</h4>
+                    <div class="chat-messages" id="pictionary-chat-messages" style="height:180px;margin-bottom:8px;"></div>
+                    <div class="chat-input-area">
+                        <input type="text" id="pictionary-guess-input" placeholder="输入你的猜测" maxlength="50" style="flex:1;font-size:16px;padding:6px;">
+                        <button class="btn" id="pictionary-guess-send" style="padding:6px 10px;">猜</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    if (window.initPictionary) window.initPictionary();
+})();
+</script>
