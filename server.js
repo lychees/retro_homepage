@@ -95,7 +95,7 @@ function getRoom(type, roomId, password) {
         if (type === 'oekaki') {
             base.oekaki = [];
             base.currentColor = '#000000';
-            base.layers = [{ id: 'layer_' + Date.now(), name: '图层 1', visible: true }];
+            base.layers = [{ id: 'layer_' + Date.now(), name: '图层 1', visible: true, opacity: 1 }];
             base.activeLayerId = base.layers[0].id;
         }
         rooms[key] = base;
@@ -436,6 +436,7 @@ io.on('connection', (socket) => {
             text: data.text,
             tool: data.tool,
             color: data.color,
+            alpha: data.alpha == null ? 1 : data.alpha,
             size: data.size
         };
         room.oekaki.push(stroke);
@@ -549,6 +550,38 @@ io.on('connection', (socket) => {
             layer.visible = !!data.visible;
             io.to(key).emit('oekaki:layer:visible', { room: roomId, id: data.id, visible: layer.visible });
         }
+    });
+    socket.on('oekaki:layer:rename', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.id) return;
+        const layer = room.layers.find(l => l.id === data.id);
+        if (layer) {
+            layer.name = String(data.name || '').substring(0, 20);
+            io.to(key).emit('oekaki:layer:rename', { room: roomId, id: data.id, name: layer.name });
+        }
+    });
+    socket.on('oekaki:layer:opacity', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.id) return;
+        const layer = room.layers.find(l => l.id === data.id);
+        if (layer) {
+            layer.opacity = Math.max(0, Math.min(1, parseFloat(data.opacity) || 1));
+            io.to(key).emit('oekaki:layer:opacity', { room: roomId, id: data.id, opacity: layer.opacity });
+        }
+    });
+    socket.on('oekaki:layer:reorder', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !Array.isArray(data.order)) return;
+        const map = {};
+        room.layers.forEach(l => map[l.id] = l);
+        room.layers = data.order.map(id => map[id]).filter(Boolean);
+        io.to(key).emit('oekaki:layer:reorder', { room: roomId, order: room.layers.map(l => l.id) });
     });
 
     // ===== FC 游戏室 =====

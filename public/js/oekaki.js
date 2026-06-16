@@ -11,6 +11,7 @@
     var drawing = false;
     var currentTool = 'pen';
     var currentColor = '#000000';
+    var currentAlpha = 1;
     var currentSize = 4;
     var currentFont = '20px VT323, monospace';
     var lastPos = null;
@@ -33,7 +34,16 @@
     // 常用颜色
     var maxPresets = 8;
     var activePresetIndex = 0;
-    var colorPresets = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+    var colorPresets = [
+        { color: '#000000', alpha: 1 },
+        { color: '#ffffff', alpha: 1 },
+        { color: '#ff0000', alpha: 1 },
+        { color: '#00ff00', alpha: 1 },
+        { color: '#0000ff', alpha: 1 },
+        { color: '#ffff00', alpha: 1 },
+        { color: '#ff00ff', alpha: 1 },
+        { color: '#00ffff', alpha: 1 }
+    ];
 
     function $(id) { return document.getElementById(id); }
 
@@ -52,6 +62,7 @@
         var importInput = $('oekaki-import');
         var addLayerBtn = $('oekaki-add-layer');
         var delLayerBtn = $('oekaki-del-layer');
+        var renameLayerBtn = $('oekaki-rename-layer');
 
         if (createBtn && !createBtn._bound) {
             createBtn._bound = true;
@@ -99,6 +110,10 @@
             delLayerBtn._bound = true;
             delLayerBtn.addEventListener('click', deleteActiveLayer);
         }
+        if (renameLayerBtn && !renameLayerBtn._bound) {
+            renameLayerBtn._bound = true;
+            renameLayerBtn.addEventListener('click', renameActiveLayer);
+        }
     }
 
     function bindTools() {
@@ -123,6 +138,14 @@
                 currentSize = parseInt(s.getAttribute('data-size'), 10);
             });
         });
+
+        var alphaSlider = $('oekaki-alpha');
+        if (alphaSlider && !alphaSlider._bound) {
+            alphaSlider._bound = true;
+            alphaSlider.addEventListener('input', function () {
+                setAlpha(parseInt(alphaSlider.value, 10) / 100, true);
+            });
+        }
     }
 
     function bindKeys() {
@@ -180,7 +203,7 @@
             e.preventDefault();
             if (currentTool === 'text' || currentTool === 'eyedropper' || !drawing || !lastPos) return;
             var pos = getPos(e);
-            drawStroke(lastPos, pos, currentTool, currentColor, currentSize, true, null, currentGroupId);
+            drawStroke(lastPos, pos, currentTool, currentColor, currentSize, currentAlpha, true, null, currentGroupId);
             lastPos = pos;
         }
 
@@ -202,30 +225,53 @@
 
     // ===== 颜色工具 =====
 
-    function setColor(color, emit) {
+    function setColor(color, alpha, emit) {
+        if (typeof alpha === 'number') currentAlpha = Math.max(0, Math.min(1, alpha));
         currentColor = color;
         var box = $('oekaki-current-color');
-        if (box) box.style.background = color;
-        updateWheelFromColor(color);
-        if (emit && roomId) {
-            window.socket.emit('oekaki:color', { room: roomId, color: color });
+        if (box) {
+            box.style.background = color;
+            box.style.opacity = currentAlpha;
         }
+        updateWheelFromColor(color);
+        updateAlphaUI();
+        if (emit && roomId) {
+            window.socket.emit('oekaki:color', { room: roomId, color: color, alpha: currentAlpha });
+        }
+    }
+
+    function setAlpha(alpha, emit) {
+        currentAlpha = Math.max(0, Math.min(1, alpha));
+        var box = $('oekaki-current-color');
+        if (box) box.style.opacity = currentAlpha;
+        updateAlphaUI();
+        if (emit && roomId) {
+            window.socket.emit('oekaki:color', { room: roomId, color: currentColor, alpha: currentAlpha });
+        }
+    }
+
+    function updateAlphaUI() {
+        var slider = $('oekaki-alpha');
+        var label = $('oekaki-alpha-value');
+        if (slider) slider.value = Math.round(currentAlpha * 100);
+        if (label) label.textContent = Math.round(currentAlpha * 100) + '%';
     }
 
     function selectPreset(index) {
         if (index < 0 || index >= maxPresets || !colorPresets[index]) return;
         activePresetIndex = index;
         renderColorPresets();
-        setColor(colorPresets[index], true);
+        var item = colorPresets[index];
+        setColor(item.color, item.alpha, true);
         currentTool = 'pen';
         document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
         var pen = document.querySelector('[data-tool="pen"]');
         if (pen) pen.classList.add('active');
     }
 
-    function overwriteActivePreset(color) {
+    function overwriteActivePreset(color, alpha) {
         if (!color || color[0] !== '#') return;
-        colorPresets[activePresetIndex] = color.toLowerCase();
+        colorPresets[activePresetIndex] = { color: color.toLowerCase(), alpha: alpha == null ? 1 : alpha };
         renderColorPresets();
     }
 
@@ -235,13 +281,15 @@
         container.innerHTML = '';
         for (var i = 0; i < maxPresets; i++) {
             var div = document.createElement('div');
+            var item = colorPresets[i];
             var classes = ['color-preset'];
-            if (!colorPresets[i]) classes.push('empty');
+            if (!item) classes.push('empty');
             if (i === activePresetIndex) classes.push('active');
             div.className = classes.join(' ');
-            if (colorPresets[i]) {
-                div.style.background = colorPresets[i];
-                div.title = colorPresets[i];
+            if (item) {
+                div.style.background = item.color;
+                div.style.opacity = item.alpha;
+                div.title = item.color + ' · 不透明度 ' + Math.round(item.alpha * 100) + '%';
             }
             div.addEventListener('click', (function (idx) {
                 return function () { selectPreset(idx); };
@@ -254,8 +302,8 @@
         if (!ctx) return;
         var pixel = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
         var hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
-        setColor(hex, true);
-        overwriteActivePreset(hex);
+        setColor(hex, pixel[3] / 255, true);
+        overwriteActivePreset(currentColor, currentAlpha);
         // 取色后自动切回画笔
         currentTool = 'pen';
         document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
@@ -406,8 +454,8 @@
     function updateColorFromWheel(emit) {
         var rgb = hsvToRgb(wheelHue, wheelSat, wheelVal);
         var hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-        setColor(hex, emit);
-        overwriteActivePreset(hex);
+        setColor(hex, currentAlpha, emit);
+        overwriteActivePreset(hex, currentAlpha);
     }
 
     function drawColorWheel() {
@@ -458,16 +506,18 @@
     // ===== 图层工具 =====
 
     function initLayers() {
-        layers = [{ id: generateId('layer'), name: '图层 1', visible: true }];
+        layers = [{ id: generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
         activeLayerId = layers[0].id;
         renderLayerList();
+        bindLayerOpacity();
     }
 
     function createLayer(name, fromServer) {
-        var layer = { id: generateId('layer'), name: name || '新图层', visible: true };
+        var layer = { id: generateId('layer'), name: name || '新图层', visible: true, opacity: 1 };
         layers.push(layer);
         activeLayerId = layer.id;
         renderLayerList();
+        updateLayerOpacityUI();
         if (!fromServer && roomId) {
             window.socket.emit('oekaki:layer:create', { room: roomId, layer: layer });
         }
@@ -483,21 +533,46 @@
         if (idx < 0) return;
         var deletedId = layers[idx].id;
         layers.splice(idx, 1);
-        // 删除该图层上的笔触
         localStrokes = localStrokes.filter(function (s) { return s.layerId !== deletedId; });
         activeLayerId = layers[Math.min(idx, layers.length - 1)].id;
         renderLayerList();
         redrawAllStrokes();
+        updateLayerOpacityUI();
         if (roomId) {
             window.socket.emit('oekaki:layer:delete', { room: roomId, id: deletedId });
+        }
+    }
+
+    function renameActiveLayer() {
+        var layer = layers.find(function (l) { return l.id === activeLayerId; });
+        if (!layer) return;
+        var newName = prompt('请输入新图层名称：', layer.name);
+        if (!newName || !newName.trim()) return;
+        layer.name = newName.trim().substring(0, 20);
+        renderLayerList();
+        if (roomId) {
+            window.socket.emit('oekaki:layer:rename', { room: roomId, id: layer.id, name: layer.name });
         }
     }
 
     function setActiveLayer(id, fromServer) {
         activeLayerId = id;
         renderLayerList();
+        updateLayerOpacityUI();
         if (!fromServer && roomId) {
             window.socket.emit('oekaki:layer:active', { room: roomId, id: id });
+        }
+    }
+
+    function setLayerOpacity(id, opacity, fromServer) {
+        var layer = layers.find(function (l) { return l.id === id; });
+        if (!layer) return;
+        layer.opacity = Math.max(0, Math.min(1, opacity));
+        renderLayerList();
+        redrawAllStrokes();
+        if (id === activeLayerId) updateLayerOpacityUI();
+        if (!fromServer && roomId) {
+            window.socket.emit('oekaki:layer:opacity', { room: roomId, id: id, opacity: layer.opacity });
         }
     }
 
@@ -512,6 +587,38 @@
         }
     }
 
+    function reorderLayers(newOrder, fromServer) {
+        if (!newOrder || newOrder.length !== layers.length) return;
+        var map = {};
+        layers.forEach(function (l) { map[l.id] = l; });
+        layers = newOrder.map(function (id) { return map[id]; }).filter(Boolean);
+        renderLayerList();
+        redrawAllStrokes();
+        if (!fromServer && roomId) {
+            window.socket.emit('oekaki:layer:reorder', { room: roomId, order: layers.map(function (l) { return l.id; }) });
+        }
+    }
+
+    function bindLayerOpacity() {
+        var slider = $('oekaki-layer-opacity');
+        if (slider && !slider._bound) {
+            slider._bound = true;
+            slider.addEventListener('input', function () {
+                var opacity = parseInt(slider.value, 10) / 100;
+                setLayerOpacity(activeLayerId, opacity);
+            });
+        }
+    }
+
+    function updateLayerOpacityUI() {
+        var slider = $('oekaki-layer-opacity');
+        var label = $('oekaki-layer-opacity-value');
+        var layer = layers.find(function (l) { return l.id === activeLayerId; });
+        var opacity = layer ? layer.opacity : 1;
+        if (slider) slider.value = Math.round(opacity * 100);
+        if (label) label.textContent = Math.round(opacity * 100) + '%';
+    }
+
     function renderLayerList() {
         var ul = $('oekaki-layer-list');
         if (!ul) return;
@@ -519,6 +626,13 @@
         layers.slice().reverse().forEach(function (layer) {
             var li = document.createElement('li');
             li.className = layer.id === activeLayerId ? 'active' : '';
+            li.setAttribute('data-layer-id', layer.id);
+            li.draggable = true;
+
+            var handle = document.createElement('span');
+            handle.className = 'drag-handle';
+            handle.textContent = '≡';
+
             var eye = document.createElement('span');
             eye.className = 'eye' + (layer.visible ? '' : ' hidden');
             eye.textContent = '👁';
@@ -526,22 +640,59 @@
                 e.stopPropagation();
                 toggleLayerVisible(layer.id);
             });
+
             var name = document.createElement('span');
-            name.textContent = layer.name;
+            name.textContent = layer.name + ' · ' + Math.round((layer.opacity || 1) * 100) + '%';
             name.style.flex = '1';
+            name.style.overflow = 'hidden';
+            name.style.textOverflow = 'ellipsis';
+
+            li.appendChild(handle);
             li.appendChild(eye);
             li.appendChild(name);
             li.addEventListener('click', function () {
                 setActiveLayer(layer.id);
             });
+
+            li.addEventListener('dragstart', function (e) {
+                e.dataTransfer.setData('text/plain', layer.id);
+                li.classList.add('dragging');
+            });
+            li.addEventListener('dragend', function () {
+                li.classList.remove('dragging');
+            });
+            li.addEventListener('dragover', function (e) {
+                e.preventDefault();
+            });
+            li.addEventListener('drop', function (e) {
+                e.preventDefault();
+                var draggedId = e.dataTransfer.getData('text/plain');
+                if (!draggedId || draggedId === layer.id) return;
+                var currentOrder = layers.map(function (l) { return l.id; });
+                var fromIdx = currentOrder.indexOf(draggedId);
+                var toIdx = currentOrder.indexOf(layer.id);
+                if (fromIdx < 0 || toIdx < 0) return;
+                currentOrder.splice(fromIdx, 1);
+                currentOrder.splice(toIdx, 0, draggedId);
+                reorderLayers(currentOrder);
+            });
+
             ul.appendChild(li);
         });
     }
 
     function setLayers(newLayers, newActiveId) {
-        layers = newLayers && newLayers.length ? newLayers : [{ id: generateId('layer'), name: '图层 1', visible: true }];
+        layers = newLayers && newLayers.length ? newLayers.map(function (l) {
+            return {
+                id: l.id,
+                name: l.name,
+                visible: l.visible !== false,
+                opacity: l.opacity == null ? 1 : l.opacity
+            };
+        }) : [{ id: generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
         activeLayerId = newActiveId || layers[0].id;
         renderLayerList();
+        updateLayerOpacityUI();
         redrawAllStrokes();
     }
 
@@ -551,15 +702,19 @@
 
     // ===== 绘制 =====
 
-    function drawStroke(from, to, tool, color, size, emit, strokeId, groupId) {
+    function drawStroke(from, to, tool, color, size, alpha, emit, strokeId, groupId) {
         if (!ctx) return;
         var layerId = getActiveLayerId();
+        var layer = layers.find(function (l) { return l.id === layerId; });
+        var globalAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = (alpha == null ? 1 : alpha) * (layer ? layer.opacity : 1);
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
         ctx.lineTo(to.x, to.y);
         ctx.lineWidth = size;
         ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
         ctx.stroke();
+        ctx.globalAlpha = globalAlpha;
 
         if (emit && roomId) {
             var id = strokeId || generateId('stroke');
@@ -573,6 +728,7 @@
                 to: to,
                 tool: tool,
                 color: color,
+                alpha: alpha == null ? 1 : alpha,
                 size: size
             };
             localStrokes.push(stroke);
@@ -583,16 +739,20 @@
     function placeText(x, y) {
         var text = prompt('请输入文字：');
         if (!text || !text.trim()) return;
-        drawText(x, y, text.trim(), currentColor, currentSize, true);
+        drawText(x, y, text.trim(), currentColor, currentSize, currentAlpha, true);
     }
 
-    function drawText(x, y, text, color, size, emit, strokeId) {
+    function drawText(x, y, text, color, size, alpha, emit, strokeId) {
         if (!ctx) return;
         var layerId = getActiveLayerId();
+        var layer = layers.find(function (l) { return l.id === layerId; });
+        var globalAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = (alpha == null ? 1 : alpha) * (layer ? layer.opacity : 1);
         ctx.font = Math.max(size * 5, 14) + 'px VT323, monospace';
         ctx.fillStyle = color;
         ctx.textBaseline = 'top';
         ctx.fillText(text, x, y);
+        ctx.globalAlpha = globalAlpha;
 
         if (emit && roomId) {
             var id = strokeId || generateId('stroke');
@@ -606,6 +766,7 @@
                 y: y,
                 text: text,
                 color: color,
+                alpha: alpha == null ? 1 : alpha,
                 size: size
             };
             localStrokes.push(stroke);
@@ -615,6 +776,10 @@
 
     function renderStroke(s) {
         if (!ctx) return;
+        var layer = layers.find(function (l) { return l.id === s.layerId; });
+        var alpha = s.alpha == null ? 1 : s.alpha;
+        var opacity = layer ? layer.opacity : 1;
+        ctx.globalAlpha = alpha * opacity;
         if (s.type === 'text') {
             ctx.font = Math.max((s.size || 4) * 5, 14) + 'px VT323, monospace';
             ctx.fillStyle = s.color;
@@ -628,6 +793,7 @@
             ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
             ctx.stroke();
         }
+        ctx.globalAlpha = 1;
     }
 
     function clearCanvas() {
@@ -729,7 +895,10 @@
     }
 
     function importProcess(data) {
-        var importedLayers = data.layers && data.layers.length ? data.layers : [{ id: generateId('layer'), name: '导入图层', visible: true }];
+        var importedLayers = data.layers && data.layers.length ? data.layers : [{ id: generateId('layer'), name: '导入图层', visible: true, opacity: 1 }];
+        importedLayers.forEach(function (l) {
+            if (l.opacity == null) l.opacity = 1;
+        });
         var idMap = {};
         importedLayers.forEach(function (l) {
             var newId = generateId('layer');
@@ -742,6 +911,7 @@
             copy.id = generateId('stroke') + '_' + (s.id || '');
             copy.room = roomId;
             copy.layerId = idMap[s.layerId] || importedLayers[0].id;
+            if (copy.alpha == null) copy.alpha = 1;
             return copy;
         });
 
@@ -749,6 +919,7 @@
         localStrokes = localStrokes.concat(importedStrokes);
         activeLayerId = importedLayers[importedLayers.length - 1].id;
         renderLayerList();
+        updateLayerOpacityUI();
         redrawAllStrokes();
 
         if (roomId) {
@@ -837,8 +1008,11 @@
         window.socket.off('oekaki:color');
         window.socket.off('oekaki:layer:create');
         window.socket.off('oekaki:layer:delete');
+        window.socket.off('oekaki:layer:rename');
         window.socket.off('oekaki:layer:active');
         window.socket.off('oekaki:layer:visible');
+        window.socket.off('oekaki:layer:opacity');
+        window.socket.off('oekaki:layer:reorder');
         window.socket.off('oekaki:layers');
         window.socket.off('oekaki:import');
         window.socket.off('oekaki:clear');
@@ -866,7 +1040,7 @@
         });
         window.socket.on('oekaki:color', function (data) {
             if (data.room !== roomId) return;
-            setColor(data.color, false);
+            setColor(data.color, data.alpha, false);
         });
         window.socket.on('oekaki:layer:create', function (data) {
             if (data.room !== roomId || !data.layer) return;
@@ -880,12 +1054,21 @@
             localStrokes = localStrokes.filter(function (s) { return s.layerId !== data.id; });
             if (activeLayerId === data.id) activeLayerId = layers[0] && layers[0].id;
             renderLayerList();
+            updateLayerOpacityUI();
             redrawAllStrokes();
+        });
+        window.socket.on('oekaki:layer:rename', function (data) {
+            if (data.room !== roomId) return;
+            var layer = layers.find(function (l) { return l.id === data.id; });
+            if (!layer) return;
+            layer.name = data.name;
+            renderLayerList();
         });
         window.socket.on('oekaki:layer:active', function (data) {
             if (data.room !== roomId) return;
             activeLayerId = data.id;
             renderLayerList();
+            updateLayerOpacityUI();
         });
         window.socket.on('oekaki:layer:visible', function (data) {
             if (data.room !== roomId) return;
@@ -895,6 +1078,19 @@
             renderLayerList();
             redrawAllStrokes();
         });
+        window.socket.on('oekaki:layer:opacity', function (data) {
+            if (data.room !== roomId) return;
+            var layer = layers.find(function (l) { return l.id === data.id; });
+            if (!layer) return;
+            layer.opacity = data.opacity;
+            renderLayerList();
+            if (data.id === activeLayerId) updateLayerOpacityUI();
+            redrawAllStrokes();
+        });
+        window.socket.on('oekaki:layer:reorder', function (data) {
+            if (data.room !== roomId || !Array.isArray(data.order)) return;
+            reorderLayers(data.order, true);
+        });
         window.socket.on('oekaki:layers', function (data) {
             if (data.room !== roomId) return;
             setLayers(data.layers, data.activeLayerId);
@@ -903,17 +1099,20 @@
             if (data.room !== roomId || !Array.isArray(data.strokes)) return;
             if (data.layers) {
                 data.layers.forEach(function (l) {
+                    if (l.opacity == null) l.opacity = 1;
                     if (!layers.some(function (existing) { return existing.id === l.id; })) {
                         layers.push(l);
                     }
                 });
             }
             data.strokes.forEach(function (s) {
+                if (s.alpha == null) s.alpha = 1;
                 if (!localStrokes.some(function (ls) { return ls.id === s.id; })) {
                     localStrokes.push(s);
                 }
             });
             renderLayerList();
+            updateLayerOpacityUI();
             redrawAllStrokes();
         });
         window.socket.on('oekaki:clear', function (data) {

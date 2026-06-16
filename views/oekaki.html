@@ -37,6 +37,11 @@
                 <div class="color-wheel-title">调色环</div>
                 <canvas id="oekaki-color-wheel" class="color-wheel" width="140" height="140"></canvas>
                 <div class="current-color-box" id="oekaki-current-color" style="background:#000000;"></div>
+                <div class="alpha-row">
+                    <label for="oekaki-alpha">不透明度</label>
+                    <input type="range" id="oekaki-alpha" min="0" max="100" value="100">
+                    <span id="oekaki-alpha-value">100%</span>
+                </div>
                 <div class="color-presets-title">常用颜色（点击使用，新选色自动覆盖）</div>
                 <div class="color-presets" id="oekaki-color-presets"></div>
 
@@ -55,10 +60,17 @@
                 <div class="oekaki-layers">
                     <h4>图层</h4>
                     <ul class="layer-list" id="oekaki-layer-list"></ul>
+                    <div class="layer-opacity-row">
+                        <label>图层不透明度</label>
+                        <input type="range" id="oekaki-layer-opacity" min="0" max="100" value="100">
+                        <span id="oekaki-layer-opacity-value">100%</span>
+                    </div>
                     <div class="layer-actions">
                         <button class="btn small" id="oekaki-add-layer">+ 新建</button>
+                        <button class="btn small" id="oekaki-rename-layer">重命名</button>
                         <button class="btn small danger" id="oekaki-del-layer">删除</button>
                     </div>
+                    <p class="layer-hint">拖拽图层可调整上下顺序</p>
                 </div>
                 <div class="oekaki-sidebar">
                     <h4>在线画手</h4>

@@ -619,6 +619,22 @@ input[type="text"]:focus, select:focus {
     cursor: default;
 }
 
+.alpha-row,
+.layer-opacity-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    font-size: 13px;
+    color: #aaaaff;
+}
+
+.alpha-row input[type="range"],
+.layer-opacity-row input[type="range"] {
+    width: 100%;
+    cursor: pointer;
+}
+
 .oekaki-right {
     display: flex;
     flex-direction: column;
@@ -676,6 +692,33 @@ input[type="text"]:focus, select:focus {
 .layer-list li .eye.hidden {
     opacity: 0.3;
     text-decoration: line-through;
+}
+
+.layer-list li.dragging {
+    opacity: 0.5;
+    border-style: dashed;
+}
+
+.layer-list li .drag-handle {
+    cursor: grab;
+    color: #8888bb;
+    font-size: 12px;
+    user-select: none;
+}
+
+.layer-list li .drag-handle:active {
+    cursor: grabbing;
+}
+
+.layer-opacity-row {
+    margin-top: 8px;
+}
+
+.layer-hint {
+    font-size: 11px;
+    color: #8888bb;
+    margin: 6px 0 0 0;
+    text-align: center;
 }
 
 .layer-actions {
