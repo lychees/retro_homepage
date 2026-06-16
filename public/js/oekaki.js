@@ -13,6 +13,7 @@
     var currentSize = 4;
     var currentFont = '20px VT323, monospace';
     var lastPos = null;
+    var currentGroupId = null;
     var chatRoom = null;
     var localStrokes = [];
     var replayTimer = null;
@@ -84,11 +85,7 @@
             if (sw._bound) return;
             sw._bound = true;
             sw.addEventListener('click', function () {
-                colors.forEach(function (c) { c.classList.remove('active'); });
-                sw.classList.add('active');
-                currentColor = sw.getAttribute('data-color');
-                var picker = $('oekaki-color-picker');
-                if (picker) picker.value = currentColor;
+                setColor(sw.getAttribute('data-color'), true);
                 currentTool = 'pen';
                 document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
                 document.querySelector('[data-tool="pen"]').classList.add('active');
@@ -99,8 +96,7 @@
         if (picker && !picker._bound) {
             picker._bound = true;
             picker.addEventListener('input', function () {
-                currentColor = picker.value;
-                document.querySelectorAll('[data-color]').forEach(function (c) { c.classList.remove('active'); });
+                setColor(picker.value, true);
                 currentTool = 'pen';
                 document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
                 document.querySelector('[data-tool="pen"]').classList.add('active');
@@ -162,6 +158,7 @@
                 return;
             }
             drawing = true;
+            currentGroupId = Date.now() + '_' + Math.random().toString(36).slice(2);
             lastPos = getPos(e);
         }
 
@@ -169,7 +166,7 @@
             e.preventDefault();
             if (currentTool === 'text' || !drawing || !lastPos) return;
             var pos = getPos(e);
-            drawStroke(lastPos, pos, currentTool, currentColor, currentSize, true);
+            drawStroke(lastPos, pos, currentTool, currentColor, currentSize, true, null, currentGroupId);
             lastPos = pos;
         }
 
@@ -177,6 +174,7 @@
             e.preventDefault();
             drawing = false;
             lastPos = null;
+            currentGroupId = null;
         }
 
         canvas.addEventListener('mousedown', start);
@@ -188,7 +186,23 @@
         canvas.addEventListener('touchend', end, { passive: false });
     }
 
-    function drawStroke(from, to, tool, color, size, emit, strokeId) {
+    function setColor(color, emit) {
+        currentColor = color;
+        var picker = $('oekaki-color-picker');
+        if (picker) picker.value = color;
+        document.querySelectorAll('[data-color]').forEach(function (c) {
+            if (c.getAttribute('data-color').toLowerCase() === color.toLowerCase()) {
+                c.classList.add('active');
+            } else {
+                c.classList.remove('active');
+            }
+        });
+        if (emit && roomId) {
+            window.socket.emit('oekaki:color', { room: roomId, color: color });
+        }
+    }
+
+    function drawStroke(from, to, tool, color, size, emit, strokeId, groupId) {
         if (!ctx) return;
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
@@ -203,6 +217,7 @@
                 id: id,
                 room: roomId,
                 type: 'line',
+                groupId: groupId || null,
                 from: from,
                 to: to,
                 tool: tool,
@@ -229,10 +244,12 @@
 
         if (emit && roomId) {
             var id = strokeId || (Date.now() + '_' + Math.random().toString(36).slice(2));
+            var groupId = Date.now() + '_' + Math.random().toString(36).slice(2);
             var stroke = {
                 id: id,
                 room: roomId,
                 type: 'text',
+                groupId: groupId,
                 x: x,
                 y: y,
                 text: text,
@@ -278,11 +295,21 @@
     function undoLastStroke() {
         if (!roomId || localStrokes.length === 0) return;
         var stroke = localStrokes[localStrokes.length - 1];
-        window.socket.emit('oekaki:undo', { room: roomId, id: stroke.id });
+        if (stroke.groupId) {
+            window.socket.emit('oekaki:undoGroup', { room: roomId, groupId: stroke.groupId });
+        } else {
+            // 兼容无 groupId 的历史笔触（导入或旧数据）
+            window.socket.emit('oekaki:undo', { room: roomId, id: stroke.id });
+        }
     }
 
     function removeStrokeById(id) {
         localStrokes = localStrokes.filter(function (s) { return s.id !== id; });
+        redrawAllStrokes();
+    }
+
+    function removeStrokeGroup(groupId) {
+        localStrokes = localStrokes.filter(function (s) { return s.groupId !== groupId; });
         redrawAllStrokes();
     }
 
@@ -427,6 +454,8 @@
         window.socket.off('oekaki:error');
         window.socket.off('oekaki:stroke');
         window.socket.off('oekaki:undo');
+        window.socket.off('oekaki:undoGroup');
+        window.socket.off('oekaki:color');
         window.socket.off('oekaki:import');
         window.socket.off('oekaki:clear');
         window.socket.off('oekaki:users');
@@ -447,6 +476,14 @@
         window.socket.on('oekaki:undo', function (data) {
             if (data.room !== roomId) return;
             removeStrokeById(data.id);
+        });
+        window.socket.on('oekaki:undoGroup', function (data) {
+            if (data.room !== roomId) return;
+            removeStrokeGroup(data.groupId);
+        });
+        window.socket.on('oekaki:color', function (data) {
+            if (data.room !== roomId) return;
+            setColor(data.color, false);
         });
         window.socket.on('oekaki:import', function (data) {
             if (data.room !== roomId || !Array.isArray(data.strokes)) return;

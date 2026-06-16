@@ -94,6 +94,7 @@ function getRoom(type, roomId, password) {
         }
         if (type === 'oekaki') {
             base.oekaki = [];
+            base.currentColor = '#000000';
         }
         rooms[key] = base;
     }
@@ -405,6 +406,7 @@ io.on('connection', (socket) => {
                 room: roomId,
                 users: Array.from(rooms[key].users.values())
             });
+            socket.emit('oekaki:color', { room: roomId, color: rooms[key].currentColor });
             rooms[key].oekaki.forEach(stroke => socket.emit('oekaki:stroke', stroke));
         }
     });
@@ -417,6 +419,8 @@ io.on('connection', (socket) => {
         const stroke = {
             id: data.id || (Date.now() + '_' + Math.random().toString(36).slice(2)),
             room: roomId,
+            type: data.type || 'line',
+            groupId: data.groupId || null,
             from: data.from,
             to: data.to,
             tool: data.tool,
@@ -439,6 +443,25 @@ io.on('connection', (socket) => {
             room.oekaki.splice(idx, 1);
             io.to(key).emit('oekaki:undo', { room: roomId, id: targetId });
         }
+    });
+    socket.on('oekaki:undoGroup', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.groupId) return;
+        const before = room.oekaki.length;
+        room.oekaki = room.oekaki.filter(s => s.groupId !== data.groupId);
+        if (room.oekaki.length < before) {
+            io.to(key).emit('oekaki:undoGroup', { room: roomId, groupId: data.groupId });
+        }
+    });
+    socket.on('oekaki:color', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !data.color) return;
+        room.currentColor = data.color;
+        io.to(key).emit('oekaki:color', { room: roomId, color: data.color });
     });
     socket.on('oekaki:clear', (data) => {
         const roomId = (data.room || '').toString().trim().toUpperCase();
