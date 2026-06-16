@@ -70,6 +70,9 @@
         this.bindCanvas();
         this.setColor(this.currentColor, this.currentAlpha);
         this.applyZoom();
+        if (this.toolbar && this.toolbar.parentNode) {
+            this.toolbar.parentNode.scrollTop = 0;
+        }
     };
 
     DrawCanvas.prototype.buildToolbar = function () {
@@ -501,6 +504,9 @@
         if (this.wheelCanvas) {
             this.wheelCanvas.style.pointerEvents = this.readOnly ? 'none' : '';
             this.wheelCanvas.style.opacity = this.readOnly ? '0.6' : '';
+        }
+        if (this.toolbar && this.toolbar.parentNode) {
+            this.toolbar.parentNode.scrollTop = 0;
         }
     };
 
