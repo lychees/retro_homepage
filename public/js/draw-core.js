@@ -36,6 +36,10 @@
         this.currentSize = this.options.defaultSize || 4;
         this.currentTextSize = this.options.defaultTextSize || 20;
         this.strokeOpacity = this.options.strokeOpacity != null ? this.options.strokeOpacity : 1;
+        this.zoom = 1;
+        this.minZoom = 0.25;
+        this.maxZoom = 4;
+        this.zoomStep = 0.1;
 
         this.colorPresets = this.options.colorPresets || DEFAULT_PRESETS;
         this.activePresetIndex = this.options.activePresetIndex != null ? this.options.activePresetIndex : -1;
@@ -56,6 +60,7 @@
         this.bindToolbar();
         this.bindCanvas();
         this.setColor(this.currentColor, this.currentAlpha);
+        this.applyZoom();
     };
 
     DrawCanvas.prototype.buildToolbar = function () {
@@ -112,6 +117,16 @@
             '<div class="text-size-row" style="display:none;">' +
                 '<label>文字大小</label>' +
                 '<input type="number" class="text-size-input" min="8" max="200" value="20">' +
+            '</div>' +
+
+            '<div class="zoom-row">' +
+                '<label>画布缩放</label>' +
+                '<div class="zoom-controls">' +
+                    '<button class="btn small zoom-out" title="缩小">-</button>' +
+                    '<span class="zoom-value">100%</span>' +
+                    '<button class="btn small zoom-in" title="放大">+</button>' +
+                    '<button class="btn small zoom-reset" title="重置">⟲</button>' +
+                '</div>' +
             '</div>';
 
         root.innerHTML = html;
@@ -130,6 +145,10 @@
         this.els.brushSizeInput = root.querySelector('.brush-size-input');
         this.els.textSizeRow = root.querySelector('.text-size-row');
         this.els.textSizeInput = root.querySelector('.text-size-input');
+        this.els.zoomOut = root.querySelector('.zoom-out');
+        this.els.zoomIn = root.querySelector('.zoom-in');
+        this.els.zoomReset = root.querySelector('.zoom-reset');
+        this.els.zoomValue = root.querySelector('.zoom-value');
 
         this.wheelCanvas = this.els.colorWheel;
         this.wheelCtx = this.wheelCanvas ? this.wheelCanvas.getContext('2d') : null;
@@ -205,6 +224,19 @@
                 self.clear();
                 self.onClear();
             });
+        }
+
+        if (this.els.zoomIn && !this.els.zoomIn._bound) {
+            this.els.zoomIn._bound = true;
+            this.els.zoomIn.addEventListener('click', function () { self.zoomIn(); });
+        }
+        if (this.els.zoomOut && !this.els.zoomOut._bound) {
+            this.els.zoomOut._bound = true;
+            this.els.zoomOut.addEventListener('click', function () { self.zoomOut(); });
+        }
+        if (this.els.zoomReset && !this.els.zoomReset._bound) {
+            this.els.zoomReset._bound = true;
+            this.els.zoomReset.addEventListener('click', function () { self.resetZoom(); });
         }
     };
 
@@ -436,6 +468,32 @@
         this.renderColorPresets();
     };
 
+    DrawCanvas.prototype.setZoom = function (zoom) {
+        this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+        this.applyZoom();
+    };
+
+    DrawCanvas.prototype.applyZoom = function () {
+        if (!this.canvas) return;
+        this.canvas.style.transform = 'scale(' + this.zoom + ')';
+        this.canvas.style.transformOrigin = 'center center';
+        if (this.els.zoomValue) {
+            this.els.zoomValue.textContent = Math.round(this.zoom * 100) + '%';
+        }
+    };
+
+    DrawCanvas.prototype.zoomIn = function () {
+        this.setZoom(this.zoom + this.zoomStep);
+    };
+
+    DrawCanvas.prototype.zoomOut = function () {
+        this.setZoom(this.zoom - this.zoomStep);
+    };
+
+    DrawCanvas.prototype.resetZoom = function () {
+        this.setZoom(1);
+    };
+
     DrawCanvas.prototype.bindCanvas = function () {
         var self = this;
         if (!this.canvas || this.canvas._drawBound) return;
@@ -500,6 +558,11 @@
         this.canvas.addEventListener('touchstart', start, { passive: false });
         document.addEventListener('touchmove', move, { passive: false });
         document.addEventListener('touchend', end);
+        this.canvas.addEventListener('wheel', function (e) {
+            e.preventDefault();
+            if (e.deltaY < 0) self.zoomIn();
+            else self.zoomOut();
+        }, { passive: false });
     };
 
     DrawCanvas.prototype.handleTextInput = function (x, y) {

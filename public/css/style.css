@@ -398,6 +398,11 @@ body {
     color: #ff99bb;
 }
 
+.btn.small {
+    padding: 4px 8px;
+    font-size: 14px;
+}
+
 input[type="text"], input[type="password"], select {
     background: #0a0a1a;
     color: #00ffff;
@@ -832,7 +837,7 @@ input[type="text"]:focus, select:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: auto;
     position: relative;
 }
 
@@ -875,7 +880,7 @@ input[type="text"]:focus, select:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: auto;
     position: relative;
 }
 
@@ -967,6 +972,35 @@ input[type="text"]:focus, select:focus {
     border: 1px solid #5555aa;
     border-radius: 3px;
     text-align: center;
+}
+
+.zoom-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    font-size: 13px;
+    color: #aaaaff;
+}
+
+.zoom-controls {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+}
+
+.zoom-controls .btn {
+    padding: 2px 8px;
+    font-size: 14px;
+    min-width: 28px;
+}
+
+.zoom-value {
+    min-width: 44px;
+    text-align: center;
+    color: #00ffff;
+    font-family: monospace;
 }
 
 .pictionary-word-box .word-content {
