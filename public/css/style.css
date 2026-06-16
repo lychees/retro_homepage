@@ -260,6 +260,14 @@ body {
     font-size: 20px;
     color: #ffccff;
     text-shadow: 0 0 8px rgba(255, 150, 255, 0.5);
+    margin: 8px 0;
+}
+
+.hero-text {
+    font-size: 28px;
+    color: #00ffff;
+    text-shadow: 0 0 12px #00ffff, 0 0 24px #0088ff;
+    letter-spacing: 2px;
 }
 
 /* ===== 公告条 ===== */
@@ -696,6 +704,100 @@ input[type="text"]:focus, select:focus {
 .about-section h2 {
     color: #00ffff;
     text-shadow: 0 0 8px #00ffff;
+}
+
+/* ===== 链接集页面 ===== */
+.links-section {
+    line-height: 1.8;
+    color: #ccccff;
+}
+
+.links-section h2 {
+    color: #00ffff;
+    text-shadow: 0 0 8px #00ffff;
+}
+
+.links-section h3 {
+    color: #ff66cc;
+    text-shadow: 0 0 6px rgba(255, 102, 204, 0.5);
+    margin-top: 28px;
+    margin-bottom: 12px;
+    border-bottom: 1px dashed #555588;
+    padding-bottom: 6px;
+}
+
+.links-intro {
+    font-size: 20px;
+    color: #ffccff;
+    text-shadow: 0 0 8px rgba(255, 150, 255, 0.5);
+}
+
+.links-ref {
+    font-size: 16px;
+    color: #9999cc;
+}
+
+.links-category {
+    margin-bottom: 10px;
+}
+
+.links-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 17px;
+}
+
+.links-table th,
+.links-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid #333366;
+}
+
+.links-table th {
+    color: #00ffff;
+    background: rgba(0, 255, 255, 0.08);
+    font-weight: normal;
+    letter-spacing: 1px;
+}
+
+.links-table td:first-child {
+    color: #00ffff;
+    font-family: 'VT323', monospace;
+    width: 160px;
+}
+
+.links-table td:nth-child(2) {
+    color: #aaaaee;
+}
+
+.links-table td a {
+    color: #ffccff;
+    text-decoration: none;
+    border-bottom: 1px dotted #ff66cc;
+    transition: color 0.2s;
+}
+
+.links-table td a:hover {
+    color: #00ffff;
+    border-bottom-color: #00ffff;
+}
+
+.links-note {
+    margin-top: 30px;
+    padding: 12px;
+    background: rgba(255, 102, 204, 0.08);
+    border: 1px dashed #ff66cc;
+    color: #ff99dd;
+    font-size: 16px;
+}
+
+.links-note code {
+    color: #00ffff;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
 }
 
 /* ===== 响应式底线 ===== */
