@@ -13,6 +13,8 @@
     var currentSize = 4;
     var lastPos = null;
     var chatRoom = null;
+    var localStrokes = [];
+    var replayTimer = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -21,6 +23,8 @@
         var clearBtn = $('oekaki-clear');
         var leaveBtn = $('oekaki-leave');
         var downloadBtn = $('oekaki-download');
+        var replayBtn = $('oekaki-replay');
+        var undoBtn = $('oekaki-undo');
 
         if (createBtn && !createBtn._bound) {
             createBtn._bound = true;
@@ -30,6 +34,7 @@
             clearBtn._bound = true;
             clearBtn.addEventListener('click', function () {
                 clearCanvas();
+                localStrokes = [];
                 if (roomId) window.socket.emit('oekaki:clear', { room: roomId });
             });
         }
@@ -40,6 +45,14 @@
         if (downloadBtn && !downloadBtn._bound) {
             downloadBtn._bound = true;
             downloadBtn.addEventListener('click', downloadCanvas);
+        }
+        if (replayBtn && !replayBtn._bound) {
+            replayBtn._bound = true;
+            replayBtn.addEventListener('click', replayStrokes);
+        }
+        if (undoBtn && !undoBtn._bound) {
+            undoBtn._bound = true;
+            undoBtn.addEventListener('click', undoLastStroke);
         }
     }
 
@@ -79,6 +92,23 @@
                 currentSize = parseInt(s.getAttribute('data-size'), 10);
             });
         });
+    }
+
+    function bindKeys() {
+        document.addEventListener('keydown', handleKeyDown);
+    }
+
+    function unbindKeys() {
+        document.removeEventListener('keydown', handleKeyDown);
+    }
+
+    function handleKeyDown(e) {
+        var view = $('oekaki-room-view');
+        if (!view || view.style.display === 'none') return;
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            undoLastStroke();
+        }
     }
 
     function bindCanvas() {
@@ -128,7 +158,7 @@
         canvas.addEventListener('touchend', end, { passive: false });
     }
 
-    function drawStroke(from, to, tool, color, size, emit) {
+    function drawStroke(from, to, tool, color, size, emit, strokeId) {
         if (!ctx) return;
         ctx.beginPath();
         ctx.moveTo(from.x, from.y);
@@ -138,14 +168,18 @@
         ctx.stroke();
 
         if (emit && roomId) {
-            window.socket.emit('oekaki:stroke', {
+            var id = strokeId || (Date.now() + '_' + Math.random().toString(36).slice(2));
+            var stroke = {
+                id: id,
                 room: roomId,
                 from: from,
                 to: to,
                 tool: tool,
                 color: color,
                 size: size
-            });
+            };
+            localStrokes.push(stroke);
+            window.socket.emit('oekaki:stroke', stroke);
         }
     }
 
@@ -163,6 +197,55 @@
         link.click();
     }
 
+    function undoLastStroke() {
+        if (!roomId || localStrokes.length === 0) return;
+        var stroke = localStrokes[localStrokes.length - 1];
+        window.socket.emit('oekaki:undo', { room: roomId, id: stroke.id });
+    }
+
+    function removeStrokeById(id) {
+        localStrokes = localStrokes.filter(function (s) { return s.id !== id; });
+        redrawAllStrokes();
+    }
+
+    function redrawAllStrokes() {
+        if (!ctx) return;
+        clearCanvas();
+        localStrokes.forEach(function (s) {
+            ctx.beginPath();
+            ctx.moveTo(s.from.x, s.from.y);
+            ctx.lineTo(s.to.x, s.to.y);
+            ctx.lineWidth = s.size;
+            ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
+            ctx.stroke();
+        });
+    }
+
+    function replayStrokes() {
+        if (!ctx || localStrokes.length === 0) return;
+        if (replayTimer) {
+            clearInterval(replayTimer);
+            replayTimer = null;
+        }
+        clearCanvas();
+        var i = 0;
+        replayTimer = setInterval(function () {
+            if (i >= localStrokes.length) {
+                clearInterval(replayTimer);
+                replayTimer = null;
+                return;
+            }
+            var s = localStrokes[i];
+            ctx.beginPath();
+            ctx.moveTo(s.from.x, s.from.y);
+            ctx.lineTo(s.to.x, s.to.y);
+            ctx.lineWidth = s.size;
+            ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
+            ctx.stroke();
+            i++;
+        }, 30); // 约 33fps 回放
+    }
+
     function createOrJoin() {
         nick = ($('oekaki-nick').value || '涂鸦星人').trim().substring(0, 16);
         roomId = ($('oekaki-room').value || window.generateRoomId()).trim().toUpperCase();
@@ -178,7 +261,9 @@
         $('oekaki-room-id').textContent = '#' + id;
         bindCanvas();
         bindTools();
+        bindKeys();
         clearCanvas();
+        localStrokes = [];
         updateUsers(users || []);
         if (!chatRoom) {
             chatRoom = new window.ChatRoom('oekaki', id, {
@@ -197,8 +282,14 @@
 
     function leaveRoom() {
         if (roomId) window.socket.emit('oekaki:leave', { room: roomId });
+        unbindKeys();
+        if (replayTimer) {
+            clearInterval(replayTimer);
+            replayTimer = null;
+        }
         roomId = null;
         chatRoom = null;
+        localStrokes = [];
         $('oekaki-room-view').style.display = 'none';
         $('oekaki-lobby').style.display = 'block';
         $('oekaki-users').innerHTML = '';
@@ -221,6 +312,7 @@
         window.socket.off('oekaki:joined');
         window.socket.off('oekaki:error');
         window.socket.off('oekaki:stroke');
+        window.socket.off('oekaki:undo');
         window.socket.off('oekaki:clear');
         window.socket.off('oekaki:users');
 
@@ -232,10 +324,18 @@
         });
         window.socket.on('oekaki:stroke', function (data) {
             if (data.room !== roomId) return;
-            drawStroke(data.from, data.to, data.tool, data.color, data.size, false);
+            // 避免重复添加自己发出的笔触
+            var exists = localStrokes.some(function (s) { return s.id === data.id; });
+            if (!exists) localStrokes.push(data);
+            drawStroke(data.from, data.to, data.tool, data.color, data.size, false, data.id);
+        });
+        window.socket.on('oekaki:undo', function (data) {
+            if (data.room !== roomId) return;
+            removeStrokeById(data.id);
         });
         window.socket.on('oekaki:clear', function (data) {
             if (data.room !== roomId) return;
+            localStrokes = [];
             clearCanvas();
         });
         window.socket.on('oekaki:users', function (data) {

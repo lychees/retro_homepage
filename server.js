@@ -422,6 +422,7 @@ io.on('connection', (socket) => {
         const room = rooms[key];
         if (!room) return;
         const stroke = {
+            id: data.id || (Date.now() + '_' + Math.random().toString(36).slice(2)),
             room: roomId,
             from: data.from,
             to: data.to,
@@ -433,6 +434,18 @@ io.on('connection', (socket) => {
         // 限制历史长度
         if (room.oekaki.length > 5000) room.oekaki.shift();
         socket.to(key).emit('oekaki:stroke', stroke);
+    });
+    socket.on('oekaki:undo', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room) return;
+        const targetId = data.id;
+        const idx = room.oekaki.findIndex(s => s.id === targetId);
+        if (idx >= 0) {
+            room.oekaki.splice(idx, 1);
+            io.to(key).emit('oekaki:undo', { room: roomId, id: targetId });
+        }
     });
     socket.on('oekaki:clear', (data) => {
         const roomId = (data.room || '').toString().trim().toUpperCase();
