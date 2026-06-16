@@ -448,6 +448,17 @@ io.on('connection', (socket) => {
         room.oekaki = [];
         io.to(key).emit('oekaki:clear', { room: roomId });
     });
+    socket.on('oekaki:import', (data) => {
+        const roomId = (data.room || '').toString().trim().toUpperCase();
+        const key = `oekaki:${roomId}`;
+        const room = rooms[key];
+        if (!room || !Array.isArray(data.strokes)) return;
+        room.oekaki = room.oekaki.concat(data.strokes);
+        if (room.oekaki.length > 5000) {
+            room.oekaki = room.oekaki.slice(room.oekaki.length - 5000);
+        }
+        socket.to(key).emit('oekaki:import', { room: roomId, strokes: data.strokes });
+    });
 
     // ===== FC 游戏室 =====
     socket.on('fc:join', (data) => joinRoom(socket, 'fc', data));

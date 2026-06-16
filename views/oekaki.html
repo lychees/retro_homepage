@@ -28,6 +28,7 @@
             <div class="oekaki-tools">
                 <div class="tool-btn active" data-tool="pen" title="画笔">✏️</div>
                 <div class="tool-btn" data-tool="eraser" title="橡皮">🧼</div>
+                <div class="tool-btn" data-tool="text" title="文字">T</div>
                 <div class="tool-btn" id="oekaki-clear" title="清空">🗑️</div>
                 <div style="margin-top:8px;">颜色</div>
                 <div class="color-swatch active" style="background:#000000" data-color="#000000"></div>
@@ -38,6 +39,7 @@
                 <div class="color-swatch" style="background:#ff00ff" data-color="#ff00ff"></div>
                 <div class="color-swatch" style="background:#00ffff" data-color="#00ffff"></div>
                 <div class="color-swatch" style="background:#ffffff" data-color="#ffffff"></div>
+                <input type="color" id="oekaki-color-picker" class="color-picker" value="#000000" title="真彩色调色盘">
                 <div style="margin-top:8px;">粗细</div>
                 <div class="brush-size" id="brush-sizes">
                     <span style="width:4px;height:4px;" data-size="2"></span>
@@ -62,6 +64,9 @@
                 <h4 style="margin-top:16px;">操作</h4>
                 <button class="btn secondary" id="oekaki-replay" style="width:100%;margin-bottom:8px;">🎬 回放绘画过程</button>
                 <button class="btn secondary" id="oekaki-undo" style="width:100%;margin-bottom:8px;">↩️ 撤销上一步 (Ctrl+Z)</button>
+                <button class="btn secondary" id="oekaki-export" style="width:100%;margin-bottom:8px;">📤 导出作画过程</button>
+                <label class="btn secondary" for="oekaki-import" style="width:100%;margin-bottom:8px;display:block;text-align:center;cursor:pointer;">📥 导入作画过程</label>
+                <input type="file" id="oekaki-import" accept=".json,.oekaki" style="display:none;">
                 <button class="btn secondary" id="oekaki-download" style="width:100%;margin-bottom:8px;">保存画作</button>
                 <button class="btn danger" id="oekaki-leave" style="width:100%;">离开房间</button>
             </div>

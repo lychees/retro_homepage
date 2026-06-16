@@ -11,6 +11,7 @@
     var currentTool = 'pen';
     var currentColor = '#000000';
     var currentSize = 4;
+    var currentFont = '20px VT323, monospace';
     var lastPos = null;
     var chatRoom = null;
     var localStrokes = [];
@@ -25,6 +26,8 @@
         var downloadBtn = $('oekaki-download');
         var replayBtn = $('oekaki-replay');
         var undoBtn = $('oekaki-undo');
+        var exportBtn = $('oekaki-export');
+        var importInput = $('oekaki-import');
 
         if (createBtn && !createBtn._bound) {
             createBtn._bound = true;
@@ -54,6 +57,14 @@
             undoBtn._bound = true;
             undoBtn.addEventListener('click', undoLastStroke);
         }
+        if (exportBtn && !exportBtn._bound) {
+            exportBtn._bound = true;
+            exportBtn.addEventListener('click', exportStrokes);
+        }
+        if (importInput && !importInput._bound) {
+            importInput._bound = true;
+            importInput.addEventListener('change', handleImport);
+        }
     }
 
     function bindTools() {
@@ -76,11 +87,25 @@
                 colors.forEach(function (c) { c.classList.remove('active'); });
                 sw.classList.add('active');
                 currentColor = sw.getAttribute('data-color');
+                var picker = $('oekaki-color-picker');
+                if (picker) picker.value = currentColor;
                 currentTool = 'pen';
                 document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
                 document.querySelector('[data-tool="pen"]').classList.add('active');
             });
         });
+
+        var picker = $('oekaki-color-picker');
+        if (picker && !picker._bound) {
+            picker._bound = true;
+            picker.addEventListener('input', function () {
+                currentColor = picker.value;
+                document.querySelectorAll('[data-color]').forEach(function (c) { c.classList.remove('active'); });
+                currentTool = 'pen';
+                document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
+                document.querySelector('[data-tool="pen"]').classList.add('active');
+            });
+        }
 
         var sizes = document.querySelectorAll('#brush-sizes span');
         sizes.forEach(function (s) {
@@ -131,13 +156,18 @@
 
         function start(e) {
             e.preventDefault();
+            if (currentTool === 'text') {
+                var pos = getPos(e);
+                placeText(pos.x, pos.y);
+                return;
+            }
             drawing = true;
             lastPos = getPos(e);
         }
 
         function move(e) {
             e.preventDefault();
-            if (!drawing || !lastPos) return;
+            if (currentTool === 'text' || !drawing || !lastPos) return;
             var pos = getPos(e);
             drawStroke(lastPos, pos, currentTool, currentColor, currentSize, true);
             lastPos = pos;
@@ -172,6 +202,7 @@
             var stroke = {
                 id: id,
                 room: roomId,
+                type: 'line',
                 from: from,
                 to: to,
                 tool: tool,
@@ -180,6 +211,53 @@
             };
             localStrokes.push(stroke);
             window.socket.emit('oekaki:stroke', stroke);
+        }
+    }
+
+    function placeText(x, y) {
+        var text = prompt('请输入文字：');
+        if (!text || !text.trim()) return;
+        drawText(x, y, text.trim(), currentColor, currentSize, true);
+    }
+
+    function drawText(x, y, text, color, size, emit, strokeId) {
+        if (!ctx) return;
+        ctx.font = Math.max(size * 5, 14) + 'px VT323, monospace';
+        ctx.fillStyle = color;
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, x, y);
+
+        if (emit && roomId) {
+            var id = strokeId || (Date.now() + '_' + Math.random().toString(36).slice(2));
+            var stroke = {
+                id: id,
+                room: roomId,
+                type: 'text',
+                x: x,
+                y: y,
+                text: text,
+                color: color,
+                size: size
+            };
+            localStrokes.push(stroke);
+            window.socket.emit('oekaki:stroke', stroke);
+        }
+    }
+
+    function renderStroke(s) {
+        if (!ctx) return;
+        if (s.type === 'text') {
+            ctx.font = Math.max((s.size || 4) * 5, 14) + 'px VT323, monospace';
+            ctx.fillStyle = s.color;
+            ctx.textBaseline = 'top';
+            ctx.fillText(s.text, s.x, s.y);
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(s.from.x, s.from.y);
+            ctx.lineTo(s.to.x, s.to.y);
+            ctx.lineWidth = s.size;
+            ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
+            ctx.stroke();
         }
     }
 
@@ -211,14 +289,7 @@
     function redrawAllStrokes() {
         if (!ctx) return;
         clearCanvas();
-        localStrokes.forEach(function (s) {
-            ctx.beginPath();
-            ctx.moveTo(s.from.x, s.from.y);
-            ctx.lineTo(s.to.x, s.to.y);
-            ctx.lineWidth = s.size;
-            ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
-            ctx.stroke();
-        });
+        localStrokes.forEach(renderStroke);
     }
 
     function replayStrokes() {
@@ -235,15 +306,58 @@
                 replayTimer = null;
                 return;
             }
-            var s = localStrokes[i];
-            ctx.beginPath();
-            ctx.moveTo(s.from.x, s.from.y);
-            ctx.lineTo(s.to.x, s.to.y);
-            ctx.lineWidth = s.size;
-            ctx.strokeStyle = s.tool === 'eraser' ? '#ffffff' : s.color;
-            ctx.stroke();
+            renderStroke(localStrokes[i]);
             i++;
         }, 30); // 约 33fps 回放
+    }
+
+    function exportStrokes() {
+        var data = {
+            version: 1,
+            canvas: { width: canvas.width, height: canvas.height },
+            strokes: localStrokes
+        };
+        var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        var link = document.createElement('a');
+        link.download = 'oekaki-process-' + (roomId || 'solo') + '-' + Date.now() + '.oekaki.json';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    function handleImport(e) {
+        var file = e.target.files && e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (event) {
+            try {
+                var data = JSON.parse(event.target.result);
+                if (!data || !Array.isArray(data.strokes)) {
+                    alert('导入失败：文件格式不正确');
+                    return;
+                }
+                importStrokes(data.strokes);
+            } catch (err) {
+                alert('导入失败：' + err.message);
+            }
+            e.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    function importStrokes(strokes) {
+        // 给导入的笔触重新生成 id，避免与现有 id 冲突
+        var imported = strokes.map(function (s) {
+            var copy = JSON.parse(JSON.stringify(s));
+            copy.id = Date.now() + '_' + Math.random().toString(36).slice(2) + '_' + (s.id || '');
+            copy.room = roomId;
+            return copy;
+        });
+        localStrokes = localStrokes.concat(imported);
+        redrawAllStrokes();
+        if (roomId) {
+            window.socket.emit('oekaki:import', { room: roomId, strokes: imported });
+        }
     }
 
     function createOrJoin() {
@@ -313,6 +427,7 @@
         window.socket.off('oekaki:error');
         window.socket.off('oekaki:stroke');
         window.socket.off('oekaki:undo');
+        window.socket.off('oekaki:import');
         window.socket.off('oekaki:clear');
         window.socket.off('oekaki:users');
 
@@ -327,11 +442,20 @@
             // 避免重复添加自己发出的笔触
             var exists = localStrokes.some(function (s) { return s.id === data.id; });
             if (!exists) localStrokes.push(data);
-            drawStroke(data.from, data.to, data.tool, data.color, data.size, false, data.id);
+            renderStroke(data);
         });
         window.socket.on('oekaki:undo', function (data) {
             if (data.room !== roomId) return;
             removeStrokeById(data.id);
+        });
+        window.socket.on('oekaki:import', function (data) {
+            if (data.room !== roomId || !Array.isArray(data.strokes)) return;
+            data.strokes.forEach(function (s) {
+                if (!localStrokes.some(function (ls) { return ls.id === s.id; })) {
+                    localStrokes.push(s);
+                }
+            });
+            redrawAllStrokes();
         });
         window.socket.on('oekaki:clear', function (data) {
             if (data.room !== roomId) return;

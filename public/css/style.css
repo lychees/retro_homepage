@@ -583,6 +583,25 @@ input[type="text"]:focus, select:focus {
     box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
 }
 
+.color-picker {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid #5555aa;
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+}
+
 .oekaki-canvas-area {
     background: rgba(10, 10, 25, 0.9);
     border: 1px solid #5555aa;
