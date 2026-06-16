@@ -1,0 +1,61 @@
+<div class="header-section">
+    <h1>☆ 欢迎来到星間茶室 ☆</h1>
+    <p class="welcome-msg">在宇宙的角落里，泡一杯茶，聊聊天，画幅画，再来一局 FC。</p>
+</div>
+
+<div class="warning-bar">
+    <marquee scrollamount="6" behavior="scroll" direction="left">
+        <span class="star-orange">★</span> 今日宇宙天气：晴朗，可见星河 <span class="star-green">★</span>
+        请遵守网络礼仪，保持友好交流 <span class="star-purple">★</span>
+        茶绘与 FC 支持多人联机，邀请朋友一起加入吧！
+    </marquee>
+</div>
+
+<div class="card">
+    <h2>◇ 房间入口</h2>
+    <p>所有房间已统一收纳在宇宙大厅。您可以在大厅浏览、创建或加入任意类型的房间，并选择是否为房间添加密码。</p>
+    <div class="room-grid">
+        <div class="room-card" onclick="window.location.hash='#/lobby'">
+            <div class="icon" style="color:#00ffff">🌌</div>
+            <h3>宇宙大厅</h3>
+            <p>浏览全部房间，创建加密或公开房。</p>
+            <a href="#/lobby" class="btn" data-link>进入大厅</a>
+        </div>
+        <div class="room-card" onclick="window.location.hash='#/chat'">
+            <div class="icon" style="color:#00ccff">💬</div>
+            <h3>聊天室</h3>
+            <p>快速进入实时文字聊天。</p>
+            <a href="#/chat" class="btn secondary" data-link>进入聊天室</a>
+        </div>
+        <div class="room-card" onclick="window.location.hash='#/oekaki'">
+            <div class="icon" style="color:#ff66cc">🎨</div>
+            <h3>茶绘房间</h3>
+            <p>快速进入多人同步画板。</p>
+            <a href="#/oekaki" class="btn secondary" data-link>进入茶绘</a>
+        </div>
+        <div class="room-card" onclick="window.location.hash='#/fc'">
+            <div class="icon" style="color:#a855f7">🎮</div>
+            <h3>FC 游戏室</h3>
+            <p>快速进入 FC 联机游戏室。</p>
+            <a href="#/fc" class="btn secondary" data-link>进入游戏室</a>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>◇ 最新公告</h2>
+    <p>
+        <strong>2024.06.16</strong> — 星間茶室正式开张！目前支持聊天室、茶绘房间与 FC 联机游戏室。<br>
+        <strong>2024.06.16</strong> — FC 游戏室已加载 10 款经典 ROM，快叫上朋友一起对战吧。
+    </p>
+</div>
+
+<script>
+(function() {
+    var counter = document.getElementById('visitor-counter');
+    if (counter) {
+        var n = Math.floor(Math.random() * 90000) + 10000;
+        counter.textContent = String(n).padStart(6, '0');
+    }
+})();
+</script>

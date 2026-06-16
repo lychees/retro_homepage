@@ -1,0 +1,72 @@
+<div class="card">
+    <div id="fc-lobby">
+        <h2>◇ FC 游戏室</h2>
+        <p>联机游玩 FC / NES 游戏。服务端权威帧同步，房间前两名玩家分别控制 1P / 2P。</p>
+        <div class="form-row">
+            <label>昵称：</label>
+            <input type="text" id="fc-nick" placeholder="红白机战士" maxlength="16">
+        </div>
+        <div class="form-row">
+            <label>房间号：</label>
+            <input type="text" id="fc-room" placeholder="留空则创建新房间" maxlength="16">
+        </div>
+        <div class="form-row">
+            <label>密码：</label>
+            <input type="password" id="fc-pwd" placeholder="公开房请留空" maxlength="16">
+        </div>
+        <div class="form-row">
+            <button class="btn" id="fc-create">创建 / 加入游戏室</button>
+        </div>
+    </div>
+
+    <div id="fc-room-view" style="display:none;">
+        <div class="room-header">
+            <h2>🎮 FC 游戏室 <span id="fc-room-id"></span></h2>
+            <div class="room-info">在线玩家：<span id="fc-online">0</span></div>
+        </div>
+        <div class="fc-layout">
+            <div class="fc-screen-area">
+                <canvas id="fc-canvas" class="fc-canvas" width="256" height="240"></canvas>
+                <div class="fc-status" id="fc-status">等待选择 ROM...</div>
+                <div class="form-row" style="margin:0;">
+                    <select id="fc-rom-select" class="fc-rom-select">
+                        <option value="">-- 选择 ROM --</option>
+                    </select>
+                    <button class="btn" id="fc-load-rom">加载游戏</button>
+                    <button class="btn secondary" id="fc-pause">暂停/继续</button>
+                </div>
+            </div>
+            <div class="fc-controls">
+                <h4>房间控制</h4>
+                <ul class="user-list" id="fc-users"></ul>
+                <button class="btn danger" id="fc-leave" style="width:100%;margin-top:12px;">离开房间</button>
+
+                <h4 style="margin-top:20px;">房间聊天</h4>
+                <div class="chat-messages" id="fc-chat-messages" style="height:140px;margin-bottom:8px;"></div>
+                <div class="chat-input-area" style="margin-top:0;">
+                    <input type="text" id="fc-chat-input" placeholder="按回车发送" maxlength="200" style="flex:1;font-size:16px;padding:6px;">
+                    <button class="btn" id="fc-chat-send" style="padding:6px 10px;">发送</button>
+                </div>
+
+                <h4 style="margin-top:20px;">按键说明</h4>
+                <div class="key-map">
+                    <strong>玩家 1：</strong><br>
+                    方向：W A S D<br>
+                    选择：Q　开始：E<br>
+                    B：J　A：K<br><br>
+                    <strong>玩家 2：</strong><br>
+                    方向：↑ ← ↓ →<br>
+                    选择：Insert　开始：Enter<br>
+                    B：Num1（或 1）　A：Num2（或 2）<br><br>
+                    <strong>※ 单人模式下可同时使用 P1 与 P2 按键 ※</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    if (window.initFc) window.initFc();
+})();
+</script>

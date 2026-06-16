@@ -1,0 +1,46 @@
+<div class="card">
+    <div id="chat-lobby">
+        <h2>◇ 聊天室</h2>
+        <p>输入昵称并创建或加入一个房间，开始星际聊天。</p>
+        <div class="form-row">
+            <label>昵称：</label>
+            <input type="text" id="chat-nick" placeholder="宇宙旅人" maxlength="16">
+        </div>
+        <div class="form-row">
+            <label>房间号：</label>
+            <input type="text" id="chat-room" placeholder="留空则创建新房间" maxlength="16">
+        </div>
+        <div class="form-row">
+            <label>密码：</label>
+            <input type="password" id="chat-pwd" placeholder="公开房请留空" maxlength="16">
+        </div>
+        <div class="form-row">
+            <button class="btn" id="chat-create">创建 / 加入房间</button>
+        </div>
+    </div>
+
+    <div id="chat-room-view" style="display:none;">
+        <div class="room-header">
+            <h2>💬 聊天室 <span id="chat-room-id"></span></h2>
+            <div class="room-info">在线人数：<span id="chat-online">0</span></div>
+        </div>
+        <div class="chat-layout">
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-sidebar">
+                <h4>在线列表</h4>
+                <ul class="user-list" id="chat-users"></ul>
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chat-input" placeholder="输入消息按回车发送..." maxlength="200">
+            <button class="btn" id="chat-send">发送</button>
+            <button class="btn secondary" id="chat-leave">离开</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    if (window.initChat) window.initChat();
+})();
+</script>

@@ -1,0 +1,28 @@
+{
+  "name": "retrohomepage2",
+  "version": "1.0.0",
+  "description": "宇宙星空主题个人主页 - 聊天室 / 茶绘 / FC 联机房间",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jsnes": "^1.2.1",
+    "socket.io": "^4.7.5"
+  },
+  "keywords": [
+    "homepage",
+    "retro",
+    "space",
+    "nes",
+    "oekaki",
+    "chat"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}
