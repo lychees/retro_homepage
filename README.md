@@ -64,13 +64,13 @@ npm start
 
 ## ROM 配置
 
-FC ROM 文件读取自本地路径：
+FC ROM 文件存放在项目本地目录：
 
 ```
-D:\Dev\retroblog3\public\roms
+public/roms/
 ```
 
-可在 `server.js` 中修改 `ROM_DIR` 变量指向其他目录。服务端通过以下接口提供 ROM：
+服务端启动时会自动扫描该目录下的 `.nes` 文件。如需更换 ROM 目录，可在 `server.js` 中修改 `ROM_DIR` 变量。提供以下接口：
 
 - `GET /api/roms` —— 列出可用 `.nes` 文件
 - `GET /roms/:name` —— 下载指定 ROM

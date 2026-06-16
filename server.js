@@ -16,7 +16,7 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3000;
-const ROM_DIR = 'D:\\Dev\\retroblog3\\public\\roms';
+const ROM_DIR = path.join(__dirname, 'public', 'roms');
 
 // 静态文件
 app.use(express.static(path.join(__dirname, 'public')));
