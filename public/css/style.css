@@ -608,6 +608,12 @@ input[type="text"]:focus, select:focus {
     border-color: #00ffff;
 }
 
+.color-preset.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 8px #00ffff;
+    transform: scale(1.08);
+}
+
 .color-preset.empty {
     background: rgba(40, 40, 80, 0.4);
     cursor: default;

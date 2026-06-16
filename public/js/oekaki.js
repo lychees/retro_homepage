@@ -32,6 +32,7 @@
 
     // 常用颜色
     var maxPresets = 8;
+    var activePresetIndex = 0;
     var colorPresets = ['#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
 
     function $(id) { return document.getElementById(id); }
@@ -206,18 +207,25 @@
         var box = $('oekaki-current-color');
         if (box) box.style.background = color;
         updateWheelFromColor(color);
-        addColorPreset(color);
         if (emit && roomId) {
             window.socket.emit('oekaki:color', { room: roomId, color: color });
         }
     }
 
-    function addColorPreset(color) {
+    function selectPreset(index) {
+        if (index < 0 || index >= maxPresets || !colorPresets[index]) return;
+        activePresetIndex = index;
+        renderColorPresets();
+        setColor(colorPresets[index], true);
+        currentTool = 'pen';
+        document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
+        var pen = document.querySelector('[data-tool="pen"]');
+        if (pen) pen.classList.add('active');
+    }
+
+    function overwriteActivePreset(color) {
         if (!color || color[0] !== '#') return;
-        var lower = color.toLowerCase();
-        colorPresets = colorPresets.filter(function (c) { return c.toLowerCase() !== lower; });
-        colorPresets.unshift(lower);
-        if (colorPresets.length > maxPresets) colorPresets.pop();
+        colorPresets[activePresetIndex] = color.toLowerCase();
         renderColorPresets();
     }
 
@@ -227,20 +235,17 @@
         container.innerHTML = '';
         for (var i = 0; i < maxPresets; i++) {
             var div = document.createElement('div');
-            div.className = 'color-preset' + (colorPresets[i] ? '' : ' empty');
+            var classes = ['color-preset'];
+            if (!colorPresets[i]) classes.push('empty');
+            if (i === activePresetIndex) classes.push('active');
+            div.className = classes.join(' ');
             if (colorPresets[i]) {
                 div.style.background = colorPresets[i];
                 div.title = colorPresets[i];
-                div.addEventListener('click', (function (c) {
-                    return function () {
-                        setColor(c, true);
-                        currentTool = 'pen';
-                        document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
-                        var pen = document.querySelector('[data-tool="pen"]');
-                        if (pen) pen.classList.add('active');
-                    };
-                })(colorPresets[i]));
             }
+            div.addEventListener('click', (function (idx) {
+                return function () { selectPreset(idx); };
+            })(i));
             container.appendChild(div);
         }
     }
@@ -250,6 +255,7 @@
         var pixel = ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
         var hex = rgbToHex(pixel[0], pixel[1], pixel[2]);
         setColor(hex, true);
+        overwriteActivePreset(hex);
         // 取色后自动切回画笔
         currentTool = 'pen';
         document.querySelectorAll('[data-tool]').forEach(function (b) { b.classList.remove('active'); });
@@ -353,8 +359,10 @@
             var innerR = outerR * 0.55;
 
             if (dist >= innerR && dist <= outerR) {
-                // 色相环
-                wheelHue = (Math.atan2(dy, dx) + Math.PI) / (2 * Math.PI);
+                // 色相环（与 canvas arc 同方向：顺时针从右侧 0° 开始）
+                var angle = Math.atan2(dy, dx);
+                if (angle < 0) angle += Math.PI * 2;
+                wheelHue = angle / (Math.PI * 2);
             } else if (dist < innerR) {
                 // SV 三角形（简化为中心三角形）
                 setWheelSVFromPoint(dx, dy, innerR);
@@ -398,12 +406,8 @@
     function updateColorFromWheel(emit) {
         var rgb = hsvToRgb(wheelHue, wheelSat, wheelVal);
         var hex = rgbToHex(rgb.r, rgb.g, rgb.b);
-        currentColor = hex;
-        var box = $('oekaki-current-color');
-        if (box) box.style.background = hex;
-        if (emit && roomId) {
-            window.socket.emit('oekaki:color', { room: roomId, color: hex });
-        }
+        setColor(hex, emit);
+        overwriteActivePreset(hex);
     }
 
     function drawColorWheel() {
