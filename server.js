@@ -286,18 +286,11 @@ function startFCEmulator(room, key) {
         });
     }, 1000 / 60);
 
-    // 每 2 秒保存并广播状态，用于新加入者同步与漂移修正
+    // 每 2 秒保存一次状态，仅用于新加入者同步（不再广播给所有客户端，避免画面跳变）
     room.stateTimer = setInterval(() => {
         if (!room.nes || !room.running) return;
         try {
             room.lastState = room.nes.toJSON();
-            io.to(key).emit('fc:state', {
-                frame: room.frameCount,
-                state: room.lastState,
-                controllers: room.controllers,
-                playerSlots: room.playerSlots,
-                romName: room.romName
-            });
         } catch (e) {
             console.error('FC 保存状态失败:', e);
         }

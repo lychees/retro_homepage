@@ -14,6 +14,14 @@
     var assignedSlot = 0;
     var keysPressed = new Set();
     var localFrame = 0;
+    var targetFrame = 0;
+
+    // 渲染循环
+    var rafId = null;
+    var lastFrameTime = 0;
+    var frameInterval = 1000 / 60;
+    var frameDebt = 0;
+    var catchUpMode = false;
 
     // 音频（使用 AudioBufferSourceNode 连续调度，避免 ScriptProcessorNode 断续）
     var audioCtx = null;
@@ -250,7 +258,10 @@
             controllers = data.controllers || { 1: {}, 2: {} };
             playerSlots = data.playerSlots || [null, null];
             localFrame = data.frame || 0;
+            targetFrame = localFrame;
+            catchUpMode = true;
             updateSlots();
+            startGameLoop();
             setStatus('游戏运行中：' + (data.romName || '未知 ROM'));
         } catch (e) {
             setStatus('ROM 加载失败: ' + e.message);
@@ -290,10 +301,65 @@
         flushAudio();
     }
 
+    function startGameLoop() {
+        if (rafId) return;
+        lastFrameTime = performance.now();
+        frameDebt = 0;
+        rafId = requestAnimationFrame(gameLoop);
+    }
+
+    function stopGameLoop() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+        lastFrameTime = 0;
+        frameDebt = 0;
+        catchUpMode = false;
+    }
+
+    function gameLoop(timestamp) {
+        if (!nes) {
+            stopGameLoop();
+            return;
+        }
+
+        var elapsed = timestamp - lastFrameTime;
+        lastFrameTime = timestamp;
+        frameDebt += elapsed / frameInterval;
+
+        // 正常速度下运行累计的帧数
+        var framesToRun = Math.floor(frameDebt);
+
+        // 追赶模式：若落后服务端较多，加速追赶
+        if (catchUpMode && targetFrame - localFrame > 5) {
+            framesToRun = Math.max(framesToRun, 2);
+        }
+
+        // 若已追上或超过服务端，退出追赶模式
+        if (targetFrame - localFrame <= 2) {
+            catchUpMode = false;
+        }
+
+        // 限制单帧爆发，避免卡顿后一次性追太多
+        if (framesToRun > 3) framesToRun = 3;
+        if (framesToRun < 1) framesToRun = 0;
+
+        for (var i = 0; i < framesToRun; i++) {
+            runFrame();
+        }
+        frameDebt -= framesToRun;
+        if (frameDebt > 2) frameDebt = 0; // 防止后台切换后 debt 爆炸
+
+        rafId = requestAnimationFrame(gameLoop);
+    }
+
     function stopEmulator() {
+        stopGameLoop();
         nes = null;
         controllers = { 1: {}, 2: {} };
         localFrame = 0;
+        targetFrame = 0;
         pendingSamples = [];
         nextAudioTime = 0;
     }
@@ -379,20 +445,9 @@
         window.socket.on('fc:controllers', function (data) {
             controllers = data.controllers || { 1: {}, 2: {} };
             playerSlots = data.playerSlots || [null, null];
+            if (data.frame) targetFrame = data.frame;
             updateSlots();
-
-            // 帧率同步：严格跟随服务端帧号
-            if (nes && data.frame) {
-                var targetFrame = data.frame;
-                var diff = targetFrame - localFrame;
-                if (diff > 0) {
-                    // 最多追赶 3 帧，避免卡顿后Burst
-                    var runCount = Math.min(diff, 3);
-                    for (var i = 0; i < runCount; i++) {
-                        runFrame();
-                    }
-                }
-            }
+            // 渲染由 requestAnimationFrame 循环独立驱动，这里只更新输入状态与目标帧号
         });
         window.socket.on('fc:state', function (data) {
             if (!nes || !data.state) return;
