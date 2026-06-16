@@ -84,6 +84,11 @@
             downloadBtn._bound = true;
             downloadBtn.addEventListener('click', downloadCanvas);
         }
+        var submitBtn = $('oekaki-submit');
+        if (submitBtn && !submitBtn._bound) {
+            submitBtn._bound = true;
+            submitBtn.addEventListener('click', submitToGallery);
+        }
         if (replayBtn && !replayBtn._bound) {
             replayBtn._bound = true;
             replayBtn.addEventListener('click', replayStrokes);
@@ -808,6 +813,31 @@
         link.download = 'oekaki-' + (roomId || 'solo') + '-' + Date.now() + '.png';
         link.href = canvas.toDataURL();
         link.click();
+    }
+
+    function submitToGallery() {
+        if (!canvas) return;
+        var title = prompt('给这幅作品起个标题（最多 40 字）：');
+        if (!title) return;
+        var author = $('oekaki-nick') && $('oekaki-nick').value ? $('oekaki-nick').value.trim() : '匿名';
+        var imageData = canvas.toDataURL('image/png');
+        var btn = $('oekaki-submit');
+        if (btn) { btn.disabled = true; btn.textContent = '投稿中…'; }
+        fetch('/api/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'oekaki', title: title, author: author, imageData: imageData })
+        }).then(function (res) { return res.json(); }).then(function (data) {
+            if (data && data.success) {
+                alert('投稿成功！请到「画廊」欣赏大家的作品。');
+            } else {
+                alert('投稿失败：' + (data && data.error ? data.error : '未知错误'));
+            }
+        }).catch(function (err) {
+            alert('投稿失败：' + err.message);
+        }).then(function () {
+            if (btn) { btn.disabled = false; btn.textContent = '🖼️ 投稿画廊'; }
+        });
     }
 
     function undoLastStroke() {

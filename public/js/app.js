@@ -100,6 +100,7 @@
     window.Router.on('chat', function (path, container, query) { loadView('chat', container, query); });
     window.Router.on('oekaki', function (path, container, query) { loadView('oekaki', container, query); });
     window.Router.on('fc', function (path, container, query) { loadView('fc', container, query); });
+    window.Router.on('gallery', function (path, container, query) { loadView('gallery', container, query); });
     window.Router.on('links', function (path, container, query) { loadView('links', container, query); });
     window.Router.on('about', function (path, container, query) { loadView('about', container, query); });
 

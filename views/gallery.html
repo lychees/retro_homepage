@@ -1,0 +1,58 @@
+<div class="card gallery-section">
+    <h2>◇ 星间画廊</h2>
+    <p class="gallery-intro">
+        这里陈列着大家从茶绘房间与 FC 游戏室投递过来的作品。<br>
+        点击缩略图可以放大查看，继续向下滚动会自动加载更多。
+    </p>
+
+    <div class="gallery-filter">
+        <button class="btn small active" data-filter="all">全部</button>
+        <button class="btn small" data-filter="oekaki">茶绘</button>
+        <button class="btn small" data-filter="fc">FC</button>
+    </div>
+
+    <div class="gallery-grid" id="gallery-grid"></div>
+    <div class="gallery-empty" id="gallery-empty" style="display:none;">还没有作品，快去茶绘房间投稿吧 ✨</div>
+    <div class="gallery-more" id="gallery-more" style="display:none;">
+        <button class="btn secondary" id="gallery-load-more">加载更多</button>
+    </div>
+</div>
+
+<div class="gallery-modal" id="gallery-modal" style="display:none;">
+    <div class="gallery-modal-backdrop" id="gallery-modal-backdrop"></div>
+    <div class="gallery-modal-content">
+        <button class="gallery-modal-close" id="gallery-modal-close">×</button>
+        <img id="gallery-modal-img" src="" alt="">
+        <div class="gallery-modal-info">
+            <h3 id="gallery-modal-title"></h3>
+            <p>作者：<span id="gallery-modal-author"></span> · 投稿时间：<span id="gallery-modal-time"></span></p>
+        </div>
+    </div>
+</div>
+
+<style>
+.gallery-filter { margin: 14px 0; display: flex; gap: 10px; }
+.gallery-filter .btn.active { background: #00ffff; color: #050510; }
+.gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 14px; }
+.gallery-item { background: rgba(20,20,50,0.85); border: 1px solid #00ffff; border-radius: 6px; padding: 8px; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.gallery-item:hover { transform: translateY(-4px); box-shadow: 0 0 12px rgba(0,255,255,0.35); }
+.gallery-thumb { width: 100%; aspect-ratio: 4/3; object-fit: contain; background: #080820; border-radius: 4px; }
+.gallery-meta { margin-top: 8px; font-size: 14px; color: #a0a0ff; }
+.gallery-meta strong { color: #00ffff; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gallery-empty { text-align: center; color: #8888cc; padding: 40px 0; }
+.gallery-more { text-align: center; margin-top: 20px; }
+.gallery-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: flex; align-items: center; justify-content: center; }
+.gallery-modal-backdrop { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); }
+.gallery-modal-content { position: relative; max-width: 90vw; max-height: 90vh; background: rgba(20,20,50,0.96); border: 2px solid #00ffff; border-radius: 8px; padding: 16px; box-shadow: 0 0 30px rgba(0,255,255,0.3); }
+.gallery-modal-content img { max-width: 80vw; max-height: 70vh; display: block; margin: 0 auto; border-radius: 4px; background: #080820; }
+.gallery-modal-close { position: absolute; top: 6px; right: 10px; background: transparent; border: none; color: #ff66cc; font-size: 28px; cursor: pointer; }
+.gallery-modal-info { margin-top: 12px; text-align: center; }
+.gallery-modal-info h3 { margin: 0 0 6px; color: #00ffff; }
+.gallery-modal-info p { margin: 0; color: #a0a0ff; font-size: 14px; }
+</style>
+
+<script>
+(function() {
+    if (window.initGallery) window.initGallery();
+})();
+</script>

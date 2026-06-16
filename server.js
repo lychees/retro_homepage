@@ -17,6 +17,28 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 const ROM_DIR = path.join(__dirname, 'public', 'roms');
+const SUBMISSIONS_FILE = path.join(__dirname, 'submissions.json');
+const MAX_SUBMISSIONS = 100;
+
+// 投稿画廊内存存储
+let submissions = [];
+
+try {
+    if (fs.existsSync(SUBMISSIONS_FILE)) {
+        submissions = JSON.parse(fs.readFileSync(SUBMISSIONS_FILE, 'utf8')) || [];
+    }
+} catch (e) {
+    console.error('加载投稿文件失败:', e.message);
+    submissions = [];
+}
+
+function saveSubmissions() {
+    try {
+        fs.writeFileSync(SUBMISSIONS_FILE, JSON.stringify(submissions, null, 2));
+    } catch (e) {
+        console.error('保存投稿失败:', e.message);
+    }
+}
 
 // 静态文件
 app.use(express.static(path.join(__dirname, 'public')));
@@ -62,6 +84,68 @@ app.get('/roms/:name', (req, res) => {
     }
     res.sendFile(filePath);
 });
+
+// 投稿与画廊 API
+app.use(express.json({ limit: '5mb' }));
+
+app.get('/api/gallery', (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
+    const list = submissions.slice().reverse();
+    const total = list.length;
+    const items = list.slice((page - 1) * limit, page * limit).map(s => ({
+        id: s.id,
+        type: s.type,
+        title: s.title,
+        author: s.author,
+        thumbnail: s.thumbnail,
+        timestamp: s.timestamp
+    }));
+    res.json({ total, page, limit, items });
+});
+
+app.get('/api/gallery/:id', (req, res) => {
+    const item = submissions.find(s => s.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        author: item.author,
+        imageData: item.imageData,
+        timestamp: item.timestamp
+    });
+});
+
+app.post('/api/submit', (req, res) => {
+    const { type, title, author, imageData } = req.body || {};
+    if (!imageData || !imageData.startsWith('data:image')) {
+        return res.status(400).json({ error: '无效的图片数据' });
+    }
+    if (imageData.length > 4 * 1024 * 1024) {
+        return res.status(400).json({ error: '图片过大' });
+    }
+    const submission = {
+        id: Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+        type: type || 'oekaki',
+        title: String(title || '无题').trim().substring(0, 40),
+        author: String(author || '匿名').trim().substring(0, 16),
+        imageData: imageData,
+        thumbnail: createThumbnail(imageData),
+        timestamp: Date.now()
+    };
+    submissions.push(submission);
+    if (submissions.length > MAX_SUBMISSIONS) {
+        submissions = submissions.slice(submissions.length - MAX_SUBMISSIONS);
+    }
+    saveSubmissions();
+    res.json({ id: submission.id, success: true });
+});
+
+function createThumbnail(imageData) {
+    // 简单截取 base64 前缀作为缩略图占位；生产环境应使用 sharp 等库缩放
+    return imageData;
+}
 
 // 兜底返回 index.html（支持 SPA hash 路由）
 app.get('*', (req, res) => {
