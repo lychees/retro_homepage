@@ -214,7 +214,11 @@
     }
 
     function renameActiveLayer() {
-        var layer = layers.find(function (l) { return l.id === activeLayerId; });
+        renameLayer(activeLayerId);
+    }
+
+    function renameLayer(id) {
+        var layer = layers.find(function (l) { return l.id === id; });
         if (!layer) return;
         var newName = prompt('请输入新图层名称：', layer.name);
         if (!newName || !newName.trim()) return;
@@ -319,6 +323,11 @@
             name.style.flex = '1';
             name.style.overflow = 'hidden';
             name.style.textOverflow = 'ellipsis';
+            name.title = '双击重命名';
+            name.addEventListener('dblclick', function (e) {
+                e.stopPropagation();
+                renameLayer(layer.id);
+            });
 
             li.appendChild(handle);
             li.appendChild(eye);
