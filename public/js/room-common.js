@@ -101,13 +101,26 @@
         if (typeof this.bindExtra === 'function') this.bindExtra();
     };
 
+    RoomSession.prototype.userNick = function () {
+        return window.currentUser && window.currentUser.nickname ? window.currentUser.nickname : '';
+    };
+
+    RoomSession.prototype.fillNickInput = function () {
+        var nickInput = this.elements.nick ? this.$(this.elements.nick) : null;
+        var userNick = this.userNick();
+        if (nickInput && userNick && !nickInput.value.trim()) {
+            nickInput.value = userNick;
+        }
+    };
+
     RoomSession.prototype.createOrJoin = function () {
         var el = this.elements;
         var nickInput = el.nick ? this.$(el.nick) : null;
         var roomInput = el.room ? this.$(el.room) : null;
         var pwdInput = el.pwd ? this.$(el.pwd) : null;
 
-        this.nick = (nickInput && nickInput.value || this.defaultNick()).trim().substring(0, 16);
+        this.fillNickInput();
+        this.nick = (nickInput && nickInput.value || this.userNick() || this.defaultNick()).trim().substring(0, 16);
         this.roomId = (roomInput && roomInput.value || window.generateRoomId()).trim().toUpperCase();
         if (!this.roomId) this.roomId = window.generateRoomId();
         if (roomInput) roomInput.value = this.roomId;
@@ -181,6 +194,7 @@
         this.bindOnce();
         this.initSocketListeners();
         this.bindConnectHandler();
+        this.fillNickInput();
 
         var query = window.currentQuery || {};
         if (query.room && !this.joined) {

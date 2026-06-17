@@ -6,8 +6,8 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const OAuth2Strategy = require('passport-oauth2').Strategy;
 
 const { BASE_URL } = require('../config');
-const { users, saveUsers, getUserById, findUserByAccount, addUserAccount } = require('../store');
-const { sanitizeUserInput, createOAuthUser, normalizeOAuthProfile, publicUser } = require('../utils');
+const { users, saveUsers, getUserById, getUserByUsername, findUserByAccount, addUserAccount } = require('../store');
+const { sanitizeUserInput, comparePassword, createOAuthUser, normalizeOAuthProfile, publicUser } = require('../utils');
 
 const router = express.Router();
 
