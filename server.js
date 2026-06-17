@@ -8,6 +8,8 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 const jsnes = require('jsnes');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,6 +20,7 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 const ROM_DIR = path.join(__dirname, 'public', 'roms');
 const SUBMISSIONS_FILE = path.join(__dirname, 'submissions.json');
+const USERS_FILE = path.join(__dirname, 'users.json');
 const MAX_SUBMISSIONS = 100;
 
 // 投稿画廊内存存储
@@ -40,9 +43,82 @@ function saveSubmissions() {
     }
 }
 
+// 用户系统
+let users = [];
+
+function loadUsers() {
+    try {
+        if (fs.existsSync(USERS_FILE)) {
+            users = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8')) || [];
+        }
+    } catch (e) {
+        console.error('加载用户文件失败:', e.message);
+        users = [];
+    }
+}
+
+function saveUsers() {
+    try {
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    } catch (e) {
+        console.error('保存用户失败:', e.message);
+    }
+}
+
+loadUsers();
+
+async function hashPassword(password) {
+    return bcrypt.hash(password, 10);
+}
+
+async function comparePassword(password, hash) {
+    return bcrypt.compare(password, hash);
+}
+
+function getUserById(id) {
+    return users.find(u => u.id === id);
+}
+
+function getUserByUsername(username) {
+    return users.find(u => u.username === username);
+}
+
+function publicUser(u, extras) {
+    if (!u) return null;
+    const obj = {
+        id: u.id,
+        username: u.username,
+        nickname: u.nickname,
+        avatar: u.avatar || '',
+        bio: u.bio || '',
+        social: u.social || {},
+        createdAt: u.createdAt
+    };
+    if (extras) Object.assign(obj, extras);
+    return obj;
+}
+
+function sanitizeUserInput(str, maxLen) {
+    return String(str || '').trim().substring(0, maxLen).replace(/[<>]/g, '');
+}
+
 // 静态文件
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/views', express.static(path.join(__dirname, 'views')));
+
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'star-tearoom-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 7 * 24 * 60 * 60 * 1000, secure: false }
+}));
+
+function requireAuth(req, res, next) {
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({ error: '请先登录' });
+    }
+    next();
+}
 
 // ROM 列表 API
 app.get('/api/roms', (req, res) => {
@@ -91,32 +167,45 @@ app.use(express.json({ limit: '5mb' }));
 app.get('/api/gallery', (req, res) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
-    const list = submissions.slice().reverse();
+    const userIdFilter = req.query.userId || null;
+    let list = submissions.slice().reverse();
+    if (userIdFilter) {
+        list = list.filter(s => s.userId === userIdFilter);
+    }
     const total = list.length;
-    const items = list.slice((page - 1) * limit, page * limit).map(s => ({
-        id: s.id,
-        type: s.type,
-        title: s.title,
-        author: s.author,
-        thumbnail: s.thumbnail,
-        timestamp: s.timestamp
-    }));
+    const items = list.slice((page - 1) * limit, page * limit).map(s => {
+        const author = getUserById(s.userId);
+        return {
+            id: s.id,
+            type: s.type,
+            title: s.title,
+            author: s.author,
+            userId: s.userId || null,
+            authorAvatar: author ? (author.avatar || '') : '',
+            thumbnail: s.thumbnail,
+            timestamp: s.timestamp
+        };
+    });
     res.json({ total, page, limit, items });
 });
 
 app.get('/api/gallery/:id', (req, res) => {
     const item = submissions.find(s => s.id === req.params.id);
     if (!item) return res.status(404).json({ error: 'Not found' });
+    const author = getUserById(item.userId);
     res.json({
         id: item.id,
         type: item.type,
         title: item.title,
         author: item.author,
+        userId: item.userId || null,
+        authorAvatar: author ? (author.avatar || '') : '',
         imageData: item.imageData,
         timestamp: item.timestamp,
         likes: item.likes || 0,
         comments: (item.comments || []).map(c => ({
             author: c.author,
+            userId: c.userId || null,
             text: c.text,
             timestamp: c.timestamp
         })),
@@ -140,8 +229,10 @@ app.post('/api/gallery/:id/comment', (req, res) => {
     const cleanText = String(text || '').trim();
     if (!cleanText) return res.status(400).json({ error: '评论内容不能为空' });
     if (cleanText.length > 200) return res.status(400).json({ error: '评论内容过长' });
+    const user = req.session && req.session.userId ? getUserById(req.session.userId) : null;
     const comment = {
-        author: String(author || '匿名').trim().substring(0, 16) || '匿名',
+        author: user ? user.nickname : (String(author || '匿名').trim().substring(0, 16) || '匿名'),
+        userId: user ? user.id : null,
         text: cleanText,
         timestamp: Date.now()
     };
@@ -160,11 +251,13 @@ app.post('/api/submit', (req, res) => {
     if (imageData.length > 4 * 1024 * 1024) {
         return res.status(400).json({ error: '图片过大' });
     }
+    const user = req.session && req.session.userId ? getUserById(req.session.userId) : null;
     const submission = {
         id: Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
         type: type || 'oekaki',
         title: String(title || '无题').trim().substring(0, 40),
-        author: String(author || '匿名').trim().substring(0, 16),
+        author: user ? user.nickname : (String(author || '匿名').trim().substring(0, 16)),
+        userId: user ? user.id : null,
         imageData: imageData,
         thumbnail: createThumbnail(imageData),
         timestamp: Date.now(),
@@ -187,6 +280,114 @@ function createThumbnail(imageData) {
     // 简单截取 base64 前缀作为缩略图占位；生产环境应使用 sharp 等库缩放
     return imageData;
 }
+
+// ==================== 账号系统 ====================
+
+app.post('/api/auth/register', async (req, res) => {
+    const { username, password, nickname } = req.body || {};
+    const cleanUsername = sanitizeUserInput(username, 32).toLowerCase();
+    const cleanNickname = sanitizeUserInput(nickname, 16) || cleanUsername;
+    if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
+        return res.status(400).json({ error: '用户名需为 3-20 位小写字母、数字或下划线' });
+    }
+    if (!password || String(password).length < 6) {
+        return res.status(400).json({ error: '密码至少需要 6 位' });
+    }
+    if (getUserByUsername(cleanUsername)) {
+        return res.status(409).json({ error: '用户名已被注册' });
+    }
+    try {
+        const hash = await hashPassword(password);
+        const user = {
+            id: 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+            username: cleanUsername,
+            passwordHash: hash,
+            nickname: cleanNickname,
+            avatar: '',
+            bio: '',
+            social: {},
+            createdAt: Date.now()
+        };
+        users.push(user);
+        saveUsers();
+        req.session.userId = user.id;
+        res.json({ user: publicUser(user) });
+    } catch (e) {
+        console.error('注册失败:', e);
+        res.status(500).json({ error: '注册失败' });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body || {};
+    const cleanUsername = sanitizeUserInput(username, 32).toLowerCase();
+    const user = getUserByUsername(cleanUsername);
+    if (!user) return res.status(401).json({ error: '用户名或密码错误' });
+    try {
+        const ok = await comparePassword(password, user.passwordHash);
+        if (!ok) return res.status(401).json({ error: '用户名或密码错误' });
+        req.session.userId = user.id;
+        res.json({ user: publicUser(user) });
+    } catch (e) {
+        console.error('登录失败:', e);
+        res.status(500).json({ error: '登录失败' });
+    }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy(function (err) {
+        if (err) return res.status(500).json({ error: '登出失败' });
+        res.clearCookie('connect.sid');
+        res.json({ success: true });
+    });
+});
+
+app.get('/api/auth/me', (req, res) => {
+    const user = req.session && req.session.userId ? getUserById(req.session.userId) : null;
+    res.json({ user: publicUser(user) });
+});
+
+app.post('/api/user/profile', requireAuth, async (req, res) => {
+    const user = getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    const { nickname, avatar, bio } = req.body || {};
+    if (nickname !== undefined) user.nickname = sanitizeUserInput(nickname, 16) || user.nickname;
+    if (avatar !== undefined) user.avatar = sanitizeUserInput(avatar, 2048);
+    if (bio !== undefined) user.bio = sanitizeUserInput(bio, 300);
+    saveUsers();
+    res.json({ user: publicUser(user) });
+});
+
+app.post('/api/user/social', requireAuth, (req, res) => {
+    const user = getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    const allowed = ['twitter', 'github', 'bilibili', 'weibo', 'homepage'];
+    const social = req.body || {};
+    allowed.forEach(key => {
+        if (social[key] !== undefined) {
+            user.social[key] = sanitizeUserInput(social[key], 120);
+        }
+    });
+    saveUsers();
+    res.json({ user: publicUser(user) });
+});
+
+app.get('/api/user/:id', (req, res) => {
+    const user = getUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: '用户不存在' });
+    const works = submissions
+        .filter(s => s.userId === user.id)
+        .slice()
+        .reverse()
+        .map(s => ({
+            id: s.id,
+            type: s.type,
+            title: s.title,
+            thumbnail: s.thumbnail,
+            timestamp: s.timestamp
+        }));
+    res.json({ user: publicUser(user, { works: works }) });
+});
 
 // 兜底返回 index.html（支持 SPA hash 路由）
 app.get('*', (req, res) => {

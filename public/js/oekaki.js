@@ -420,7 +420,7 @@
         if (!canvas) return;
         var title = prompt('给这幅作品起个标题（最多 40 字）：');
         if (!title) return;
-        var author = $('oekaki-nick') && $('oekaki-nick').value ? $('oekaki-nick').value.trim() : '匿名';
+        var author = window.currentUser ? window.currentUser.nickname : ($('oekaki-nick') && $('oekaki-nick').value ? $('oekaki-nick').value.trim() : '匿名');
         var imageData = canvas.toDataURL('image/png');
         var btn = $('oekaki-submit');
         if (btn) { btn.disabled = true; btn.textContent = '投稿中…'; }

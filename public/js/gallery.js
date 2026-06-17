@@ -105,11 +105,29 @@
                 '<img class="gallery-thumb" src="' + escapeHtml(item.thumbnail || '') + '" alt="' + escapeHtml(item.title) + '" loading="lazy">' +
                 '<div class="gallery-meta">' +
                     '<strong>' + escapeHtml(item.title) + '</strong>' +
-                    '<span>' + escapeHtml(item.author || '匿名') + ' · ' + formatTime(item.timestamp) + '</span>' +
+                    '<span>' + authorHtml(item, true) + ' · ' + formatTime(item.timestamp) + '</span>' +
                 '</div>';
-            el.addEventListener('click', function () { openModal(item.id); });
+            el.addEventListener('click', function (e) {
+                if (e.target.closest('.user-link')) {
+                    e.preventDefault();
+                    return;
+                }
+                openModal(item.id);
+            });
             grid.appendChild(el);
         });
+    }
+
+    function authorHtml(item, inline) {
+        var nick = escapeHtml(item.author || '匿名');
+        var avatar = item.authorAvatar || window.Auth.avatarUrl(null);
+        var cls = inline ? 'user-avatar-inline' : 'user-avatar-large';
+        if (item.userId) {
+            return '<a class="user-link" href="#/user/' + encodeURIComponent(item.userId) + '" data-link>' +
+                '<img class="' + cls + '" src="' + escapeHtml(avatar) + '" alt="">' + nick +
+            '</a>';
+        }
+        return '<img class="' + cls + '" src="' + escapeHtml(avatar) + '" alt="">' + nick;
     }
 
     function openModal(id) {
@@ -121,7 +139,8 @@
         $('gallery-modal-img').style.display = 'block';
         $('gallery-replay-canvas').style.display = 'none';
         $('gallery-modal-title').textContent = item.title;
-        $('gallery-modal-author').textContent = item.author || '匿名';
+        var authorEl = $('gallery-modal-author');
+        if (authorEl) authorEl.innerHTML = authorHtml(item, false);
         $('gallery-modal-time').textContent = formatTime(item.timestamp);
         updateProcessButtons(item);
         renderDetail({ likes: item.likes || 0, comments: item.comments || [] });
@@ -162,7 +181,13 @@
         }
         comments.forEach(function (c) {
             var li = document.createElement('li');
-            li.innerHTML = '<span class="comment-author">' + escapeHtml(c.author) + '：</span>' +
+            var authorPart;
+            if (c.userId) {
+                authorPart = '<a class="user-link comment-author" href="#/user/' + encodeURIComponent(c.userId) + '" data-link>' + escapeHtml(c.author) + '</a>：';
+            } else {
+                authorPart = '<span class="comment-author">' + escapeHtml(c.author) + '：</span>';
+            }
+            li.innerHTML = authorPart +
                 escapeHtml(c.text) +
                 '<span class="comment-time">' + formatTime(c.timestamp) + '</span>';
             list.appendChild(li);
@@ -347,4 +372,9 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
     }
+
+    window.Gallery = {
+        openItem: openModal,
+        close: closeModal
+    };
 })();

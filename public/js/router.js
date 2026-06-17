@@ -41,6 +41,17 @@
             this.query = parseQuery(mainPart[1]);
 
             var handler = this.routes[path];
+            if (!handler) {
+                // 支持如 #/user/xxx 这类参数化路由
+                var slashIdx = path.indexOf('/');
+                if (slashIdx > 0) {
+                    var base = path.substring(0, slashIdx);
+                    if (this.routes[base]) {
+                        this.query.id = path.substring(slashIdx + 1);
+                        handler = this.routes[base];
+                    }
+                }
+            }
             if (!handler) handler = this.routes['/'];
 
             var app = document.getElementById('app');

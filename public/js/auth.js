@@ -1,0 +1,310 @@
+/**
+ * 星間茶室 - 全局账号系统
+ * 维护登录态、渲染侧边栏账号入口、提供登录/注册/设置弹窗
+ */
+(function () {
+    'use strict';
+
+    window.currentUser = null;
+
+    function api(path, options) {
+        options = options || {};
+        options.headers = options.headers || {};
+        options.headers['Content-Type'] = 'application/json';
+        if (options.body && typeof options.body === 'object') {
+            options.body = JSON.stringify(options.body);
+        }
+        return fetch('/api' + path, options).then(function (res) {
+            return res.json().then(function (data) {
+                if (!res.ok) throw new Error(data.error || '请求失败');
+                return data;
+            });
+        });
+    }
+
+    function fetchMe() {
+        return api('/auth/me').then(function (data) {
+            window.currentUser = data.user || null;
+            renderAuthWidget();
+            return window.currentUser;
+        }).catch(function () {
+            window.currentUser = null;
+            renderAuthWidget();
+        });
+    }
+
+    function login(username, password) {
+        return api('/auth/login', { method: 'POST', body: { username: username, password: password } }).then(function (data) {
+            window.currentUser = data.user || null;
+            renderAuthWidget();
+            return window.currentUser;
+        });
+    }
+
+    function register(username, password, nickname) {
+        return api('/auth/register', { method: 'POST', body: { username: username, password: password, nickname: nickname } }).then(function (data) {
+            window.currentUser = data.user || null;
+            renderAuthWidget();
+            return window.currentUser;
+        });
+    }
+
+    function logout() {
+        return api('/auth/logout', { method: 'POST' }).then(function () {
+            window.currentUser = null;
+            renderAuthWidget();
+        });
+    }
+
+    function updateProfile(fields) {
+        return api('/user/profile', { method: 'POST', body: fields }).then(function (data) {
+            window.currentUser = data.user || null;
+            renderAuthWidget();
+            return window.currentUser;
+        });
+    }
+
+    function updateSocial(social) {
+        return api('/user/social', { method: 'POST', body: social }).then(function (data) {
+            window.currentUser = data.user || null;
+            renderAuthWidget();
+            return window.currentUser;
+        });
+    }
+
+    function avatarUrl(user) {
+        if (user && user.avatar) return user.avatar;
+        return 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\'%3E%3Crect width=\'40\' height=\'40\' fill=\'%23333\'/%3E%3Ctext x=\'50%25\' y=\'55%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23aaa\' font-family=\'monospace\' font-size=\'20\'%3E?%3C/text%3E%3C/svg%3E';
+    }
+
+    function ensureModal() {
+        var modal = document.getElementById('auth-modal');
+        if (modal) return modal;
+        modal = document.createElement('div');
+        modal.id = 'auth-modal';
+        modal.className = 'modal-overlay auth-modal';
+        modal.innerHTML = '<div class="modal-box">' +
+            '<div class="modal-header">账号 <button class="modal-close" id="auth-modal-close">×</button></div>' +
+            '<div class="auth-tabs">' +
+                '<button class="auth-tab active" data-tab="login">登录</button>' +
+                '<button class="auth-tab" data-tab="register">注册</button>' +
+                '<button class="auth-tab" data-tab="profile">资料</button>' +
+            '</div>' +
+            '<div class="auth-panel active" data-panel="login">' +
+                '<label>用户名</label><input type="text" id="auth-login-username" maxlength="20" placeholder="小写字母/数字/下划线">' +
+                '<label>密码</label><input type="password" id="auth-login-password" placeholder="密码">' +
+                '<div class="auth-error" id="auth-login-error"></div>' +
+                '<button class="auth-submit" id="auth-login-btn">登录</button>' +
+            '</div>' +
+            '<div class="auth-panel" data-panel="register">' +
+                '<label>用户名</label><input type="text" id="auth-reg-username" maxlength="20" placeholder="3-20 位">' +
+                '<label>昵称</label><input type="text" id="auth-reg-nickname" maxlength="16" placeholder="显示名称">' +
+                '<label>密码</label><input type="password" id="auth-reg-password" placeholder="至少 6 位">' +
+                '<div class="auth-error" id="auth-reg-error"></div>' +
+                '<button class="auth-submit" id="auth-reg-btn">注册</button>' +
+            '</div>' +
+            '<div class="auth-panel" data-panel="profile">' +
+                '<div id="auth-profile-guest">请先登录。</div>' +
+                '<div id="auth-profile-form">' +
+                    '<label>昵称</label><input type="text" id="auth-profile-nickname" maxlength="16">' +
+                    '<label>头像 URL / Data URI</label><textarea id="auth-profile-avatar" rows="3" maxlength="2048" placeholder="图片链接或 base64"></textarea>' +
+                    '<label>简介</label><textarea id="auth-profile-bio" rows="3" maxlength="300" placeholder="一句话介绍自己"></textarea>' +
+                    '<label>Twitter</label><input type="text" id="auth-social-twitter" maxlength="120" placeholder="@username">' +
+                    '<label>GitHub</label><input type="text" id="auth-social-github" maxlength="120" placeholder="username">' +
+                    '<label>Bilibili</label><input type="text" id="auth-social-bilibili" maxlength="120" placeholder="UID/链接">' +
+                    '<label>Weibo</label><input type="text" id="auth-social-weibo" maxlength="120" placeholder="链接">' +
+                    '<label>个人主页</label><input type="text" id="auth-social-homepage" maxlength="120" placeholder="https://...">' +
+                    '<div class="auth-error" id="auth-profile-error"></div>' +
+                    '<button class="auth-submit" id="auth-profile-btn">保存</button>' +
+                    '<button class="auth-secondary" id="auth-logout-btn">退出登录</button>' +
+                '</div>' +
+            '</div>' +
+        '</div></div>';
+        document.body.appendChild(modal);
+
+        modal.querySelector('#auth-modal-close').addEventListener('click', hideModal);
+        modal.addEventListener('click', function (e) { if (e.target === modal) hideModal(); });
+
+        var tabs = modal.querySelectorAll('.auth-tab');
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var name = tab.getAttribute('data-tab');
+                tabs.forEach(function (t) { t.classList.toggle('active', t === tab); });
+                modal.querySelectorAll('.auth-panel').forEach(function (p) {
+                    p.classList.toggle('active', p.getAttribute('data-panel') === name);
+                });
+                if (name === 'profile') fillProfileForm();
+            });
+        });
+
+        modal.querySelector('#auth-login-btn').addEventListener('click', function () {
+            var u = document.getElementById('auth-login-username').value.trim();
+            var p = document.getElementById('auth-login-password').value;
+            document.getElementById('auth-login-error').textContent = '';
+            login(u, p).then(function () {
+                hideModal();
+                switchTab('profile');
+            }).catch(function (e) {
+                document.getElementById('auth-login-error').textContent = e.message;
+            });
+        });
+
+        modal.querySelector('#auth-reg-btn').addEventListener('click', function () {
+            var u = document.getElementById('auth-reg-username').value.trim().toLowerCase();
+            var n = document.getElementById('auth-reg-nickname').value.trim();
+            var p = document.getElementById('auth-reg-password').value;
+            document.getElementById('auth-reg-error').textContent = '';
+            register(u, p, n).then(function () {
+                hideModal();
+                switchTab('profile');
+            }).catch(function (e) {
+                document.getElementById('auth-reg-error').textContent = e.message;
+            });
+        });
+
+        modal.querySelector('#auth-profile-btn').addEventListener('click', function () {
+            var nickname = document.getElementById('auth-profile-nickname').value.trim();
+            var avatar = document.getElementById('auth-profile-avatar').value.trim();
+            var bio = document.getElementById('auth-profile-bio').value.trim();
+            document.getElementById('auth-profile-error').textContent = '';
+            updateProfile({ nickname: nickname, avatar: avatar, bio: bio }).then(function () {
+                var social = {
+                    twitter: document.getElementById('auth-social-twitter').value.trim(),
+                    github: document.getElementById('auth-social-github').value.trim(),
+                    bilibili: document.getElementById('auth-social-bilibili').value.trim(),
+                    weibo: document.getElementById('auth-social-weibo').value.trim(),
+                    homepage: document.getElementById('auth-social-homepage').value.trim()
+                };
+                return updateSocial(social);
+            }).then(function () {
+                document.getElementById('auth-profile-error').textContent = '保存成功';
+            }).catch(function (e) {
+                document.getElementById('auth-profile-error').textContent = e.message;
+            });
+        });
+
+        modal.querySelector('#auth-logout-btn').addEventListener('click', function () {
+            logout().then(function () {
+                switchTab('login');
+                hideModal();
+            });
+        });
+
+        return modal;
+    }
+
+    function showModal(tab) {
+        var modal = ensureModal();
+        modal.style.display = 'flex';
+        switchTab(tab || 'login');
+    }
+
+    function hideModal() {
+        var modal = document.getElementById('auth-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function switchTab(name) {
+        var modal = document.getElementById('auth-modal');
+        if (!modal) return;
+        modal.querySelectorAll('.auth-tab').forEach(function (t) {
+            t.classList.toggle('active', t.getAttribute('data-tab') === name);
+        });
+        modal.querySelectorAll('.auth-panel').forEach(function (p) {
+            p.classList.toggle('active', p.getAttribute('data-panel') === name);
+        });
+        if (name === 'profile') fillProfileForm();
+    }
+
+    function fillProfileForm() {
+        var user = window.currentUser;
+        var form = document.getElementById('auth-profile-form');
+        var guest = document.getElementById('auth-profile-guest');
+        if (!form || !guest) return;
+        if (!user) {
+            form.style.display = 'none';
+            guest.style.display = 'block';
+            return;
+        }
+        form.style.display = 'block';
+        guest.style.display = 'none';
+        document.getElementById('auth-profile-nickname').value = user.nickname || '';
+        document.getElementById('auth-profile-avatar').value = user.avatar || '';
+        document.getElementById('auth-profile-bio').value = user.bio || '';
+        var social = user.social || {};
+        document.getElementById('auth-social-twitter').value = social.twitter || '';
+        document.getElementById('auth-social-github').value = social.github || '';
+        document.getElementById('auth-social-bilibili').value = social.bilibili || '';
+        document.getElementById('auth-social-weibo').value = social.weibo || '';
+        document.getElementById('auth-social-homepage').value = social.homepage || '';
+    }
+
+    function fillNicknames() {
+        var user = window.currentUser;
+        if (!user) return;
+        ['chat-nick', 'oekaki-nick', 'pictionary-nick'].forEach(function (id) {
+            var input = document.getElementById(id);
+            if (input && !input.value.trim()) {
+                input.value = user.nickname || '';
+            }
+        });
+    }
+
+    function renderAuthWidget() {
+        var container = document.getElementById('auth-widget');
+        if (!container) return;
+        var user = window.currentUser;
+        if (user) {
+            fillNicknames();
+            container.innerHTML = '<div class="auth-widget-logged">' +
+                '<img src="' + avatarUrl(user) + '" alt="avatar" class="auth-avatar">' +
+                '<div class="auth-info">' +
+                    '<div class="auth-nickname">' + escapeHtml(user.nickname || user.username) + '</div>' +
+                    '<div class="auth-actions">' +
+                        '<a href="#/user/' + encodeURIComponent(user.id) + '" data-link>主页</a>' +
+                        '<a href="#" class="auth-open-profile">设置</a>' +
+                        '<a href="#" class="auth-logout-link">退出</a>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+            container.querySelector('.auth-open-profile').addEventListener('click', function (e) {
+                e.preventDefault();
+                showModal('profile');
+            });
+            container.querySelector('.auth-logout-link').addEventListener('click', function (e) {
+                e.preventDefault();
+                logout();
+            });
+        } else {
+            container.innerHTML = '<div class="auth-widget-guest">' +
+                '<a href="#" class="auth-login-link">登录 / 注册</a>' +
+            '</div>';
+            container.querySelector('.auth-login-link').addEventListener('click', function (e) {
+                e.preventDefault();
+                showModal('login');
+            });
+        }
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    window.Auth = {
+        fetchMe: fetchMe,
+        login: login,
+        register: register,
+        logout: logout,
+        updateProfile: updateProfile,
+        updateSocial: updateSocial,
+        avatarUrl: avatarUrl,
+        showModal: showModal
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+        renderAuthWidget();
+        fetchMe();
+    });
+})();

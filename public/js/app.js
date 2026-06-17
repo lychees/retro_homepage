@@ -102,6 +102,8 @@
     window.Router.on('fc', function (path, container, query) { loadView('fc', container, query); });
     window.Router.on('gallery', function (path, container, query) { loadView('gallery', container, query); });
     window.Router.on('pictionary', function (path, container, query) { loadView('pictionary', container, query); });
+    window.Router.on('gallery', function (path, container, query) { loadView('gallery', container, query); });
+    window.Router.on('user', function (path, container, query) { loadView('user', container, query); });
     window.Router.on('links', function (path, container, query) { loadView('links', container, query); });
     window.Router.on('about', function (path, container, query) { loadView('about', container, query); });
 
