@@ -73,6 +73,24 @@ npm start
 
 默认监听 `http://localhost:3000`；若 3000 被占用则自动尝试 3001、3002……
 
+### 环境变量
+
+复制 `.env.example` 为 `.env` 并填写需要的配置：
+
+```bash
+cp .env.example .env
+```
+
+| 变量 | 说明 |
+|------|------|
+| `SESSION_SECRET` | 会话密钥（生产环境必填） |
+| `BASE_URL` | 站点根地址，用于 OAuth 回调（默认 `http://localhost:3000`） |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth 应用凭证 |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth 应用凭证 |
+| `QQ_CLIENT_ID` / `QQ_CLIENT_SECRET` | QQ 互联应用凭证 |
+
+未配置的 OAuth 提供方会自动隐藏对应的登录/绑定按钮。
+
 ## ROM 配置
 
 FC ROM 文件存放在项目本地目录：

@@ -1466,6 +1466,64 @@ input[type="text"]:focus, select:focus {
     border-color: #ff66cc;
 }
 
+.auth-oauth {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed #5555aa;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.auth-oauth-bind {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.auth-oauth-title {
+    color: #aaaaff;
+    font-size: 14px;
+    text-align: center;
+}
+
+.auth-oauth-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 3px;
+    border: 1px solid #5555aa;
+    background: rgba(40, 40, 80, 0.6);
+    color: #e0e0ff;
+    text-decoration: none;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.auth-oauth-btn:hover {
+    background: rgba(60, 60, 120, 0.7);
+    border-color: #00ffff;
+    color: #ffffff;
+}
+
+.auth-oauth-btn.bound {
+    opacity: 0.6;
+    cursor: default;
+    border-style: dashed;
+}
+
+.auth-oauth-icon {
+    font-size: 18px;
+}
+
+.auth-oauth-github { border-color: #888888; }
+.auth-oauth-google { border-color: #db4437; }
+.auth-oauth-qq { border-color: #12b7f5; }
+
 .user-link {
     color: #00ffff;
     text-decoration: none;

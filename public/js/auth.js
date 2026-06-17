@@ -26,10 +26,12 @@
         return api('/auth/me').then(function (data) {
             window.currentUser = data.user || null;
             renderAuthWidget();
+            renderOAuthButtons();
             return window.currentUser;
         }).catch(function () {
             window.currentUser = null;
             renderAuthWidget();
+            renderOAuthButtons();
         });
     }
 
@@ -37,6 +39,7 @@
         return api('/auth/login', { method: 'POST', body: { username: username, password: password } }).then(function (data) {
             window.currentUser = data.user || null;
             renderAuthWidget();
+            renderOAuthButtons();
             return window.currentUser;
         });
     }
@@ -45,6 +48,7 @@
         return api('/auth/register', { method: 'POST', body: { username: username, password: password, nickname: nickname } }).then(function (data) {
             window.currentUser = data.user || null;
             renderAuthWidget();
+            renderOAuthButtons();
             return window.currentUser;
         });
     }
@@ -53,6 +57,7 @@
         return api('/auth/logout', { method: 'POST' }).then(function () {
             window.currentUser = null;
             renderAuthWidget();
+            renderOAuthButtons();
         });
     }
 
@@ -60,6 +65,7 @@
         return api('/user/profile', { method: 'POST', body: fields }).then(function (data) {
             window.currentUser = data.user || null;
             renderAuthWidget();
+            renderOAuthButtons();
             return window.currentUser;
         });
     }
@@ -68,6 +74,7 @@
         return api('/user/social', { method: 'POST', body: social }).then(function (data) {
             window.currentUser = data.user || null;
             renderAuthWidget();
+            renderOAuthButtons();
             return window.currentUser;
         });
     }
@@ -75,6 +82,75 @@
     function avatarUrl(user) {
         if (user && user.avatar) return user.avatar;
         return 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\'%3E%3Crect width=\'40\' height=\'40\' fill=\'%23333\'/%3E%3Ctext x=\'50%25\' y=\'55%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' fill=\'%23aaa\' font-family=\'monospace\' font-size=\'20\'%3E?%3C/text%3E%3C/svg%3E';
+    }
+
+    var oauthProviders = {};
+
+    function fetchProviders() {
+        return fetch('/api/auth/providers')
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                oauthProviders = (data && data.providers) || {};
+                renderOAuthButtons();
+            })
+            .catch(function () { oauthProviders = {}; });
+    }
+
+    function renderOAuthButtons() {
+        var names = { github: 'GitHub', google: 'Google', qq: 'QQ' };
+        var icons = { github: '🐙', google: 'G', qq: '🐧' };
+        var enabled = Object.keys(oauthProviders).filter(function (k) { return oauthProviders[k]; });
+        var loginBox = document.getElementById('auth-oauth-login');
+        if (loginBox && enabled.length) {
+            loginBox.innerHTML = '<div class="auth-oauth-title">第三方登录</div>' +
+                enabled.map(function (p) {
+                    return '<a class="auth-oauth-btn auth-oauth-' + p + '" href="/api/auth/' + p + '">' +
+                        '<span class="auth-oauth-icon">' + icons[p] + '</span> ' + names[p] + ' 登录' +
+                    '</a>';
+                }).join('');
+        } else if (loginBox) {
+            loginBox.innerHTML = '';
+        }
+
+        var bindBox = document.getElementById('auth-oauth-bind');
+        if (!bindBox) return;
+        var user = window.currentUser;
+        if (!user || !enabled.length) {
+            bindBox.innerHTML = '';
+            return;
+        }
+        var bound = user.providers || [];
+        bindBox.innerHTML = '<div class="auth-oauth-title">绑定账号</div>' +
+            enabled.map(function (p) {
+                var isBound = bound.indexOf(p) >= 0;
+                if (isBound) {
+                    return '<span class="auth-oauth-btn bound">' + icons[p] + ' ' + names[p] + ' 已绑定</span>';
+                }
+                return '<a class="auth-oauth-btn auth-oauth-' + p + '" href="/api/auth/' + p + '">' +
+                    '<span class="auth-oauth-icon">' + icons[p] + '</span> 绑定 ' + names[p] +
+                '</a>';
+            }).join('');
+    }
+
+    function checkOAuthResult() {
+        var hash = window.location.hash || '';
+        if (hash.indexOf('bind=success') >= 0) {
+            showModal('profile');
+            var err = document.getElementById('auth-profile-error');
+            if (err) err.textContent = '第三方账号绑定成功';
+            window.location.hash = hash.replace(/[?&]bind=success/, '').replace(/\?&/, '?').replace(/\?$/, '');
+        } else if (hash.indexOf('error=account_already_bound') >= 0) {
+            showModal('profile');
+            var err2 = document.getElementById('auth-profile-error');
+            if (err2) err2.textContent = '该第三方账号已绑定到其他用户';
+            window.location.hash = hash.replace(/[?&]error=account_already_bound/, '').replace(/\?&/, '?').replace(/\?$/, '');
+        } else if (hash.indexOf('error=') >= 0) {
+            var match = hash.match(/error=([^&]+)/);
+            showModal('login');
+            var err3 = document.getElementById('auth-login-error');
+            if (err3 && match) err3.textContent = '第三方登录失败：' + decodeURIComponent(match[1]);
+            window.location.hash = hash.replace(/[?&]error=[^&]+/, '').replace(/\?&/, '?').replace(/\?$/, '');
+        }
     }
 
     function ensureModal() {
@@ -95,6 +171,7 @@
                 '<label>密码</label><input type="password" id="auth-login-password" placeholder="密码">' +
                 '<div class="auth-error" id="auth-login-error"></div>' +
                 '<button class="auth-submit" id="auth-login-btn">登录</button>' +
+                '<div class="auth-oauth" id="auth-oauth-login"></div>' +
             '</div>' +
             '<div class="auth-panel" data-panel="register">' +
                 '<label>用户名</label><input type="text" id="auth-reg-username" maxlength="20" placeholder="3-20 位">' +
@@ -114,6 +191,7 @@
                     '<label>Bilibili</label><input type="text" id="auth-social-bilibili" maxlength="120" placeholder="UID/链接">' +
                     '<label>Weibo</label><input type="text" id="auth-social-weibo" maxlength="120" placeholder="链接">' +
                     '<label>个人主页</label><input type="text" id="auth-social-homepage" maxlength="120" placeholder="https://...">' +
+                    '<div class="auth-oauth-bind" id="auth-oauth-bind"></div>' +
                     '<div class="auth-error" id="auth-profile-error"></div>' +
                     '<button class="auth-submit" id="auth-profile-btn">保存</button>' +
                     '<button class="auth-secondary" id="auth-logout-btn">退出登录</button>' +
@@ -121,6 +199,8 @@
             '</div>' +
         '</div></div>';
         document.body.appendChild(modal);
+
+        fetchProviders();
 
         modal.querySelector('#auth-modal-close').addEventListener('click', hideModal);
         modal.addEventListener('click', function (e) { if (e.target === modal) hideModal(); });
@@ -133,7 +213,10 @@
                 modal.querySelectorAll('.auth-panel').forEach(function (p) {
                     p.classList.toggle('active', p.getAttribute('data-panel') === name);
                 });
-                if (name === 'profile') fillProfileForm();
+                if (name === 'profile') {
+                    fillProfileForm();
+                    renderOAuthButtons();
+                }
             });
         });
 
@@ -305,6 +388,8 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         renderAuthWidget();
-        fetchMe();
+        fetchMe().then(function () {
+            setTimeout(checkOAuthResult, 0);
+        });
     });
 })();

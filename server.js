@@ -4,12 +4,17 @@
  */
 const express = require('express');
 const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 const jsnes = require('jsnes');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const passport = require('passport');
+const GitHubStrategy = require('passport-github2').Strategy;
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const OAuth2Strategy = require('passport-oauth2').Strategy;
 
 const app = express();
 const server = http.createServer(app);
@@ -92,6 +97,7 @@ function publicUser(u, extras) {
         avatar: u.avatar || '',
         bio: u.bio || '',
         social: u.social || {},
+        providers: Array.isArray(u.accounts) ? u.accounts.map(a => a.provider) : [],
         createdAt: u.createdAt
     };
     if (extras) Object.assign(obj, extras);
@@ -100,6 +106,47 @@ function publicUser(u, extras) {
 
 function sanitizeUserInput(str, maxLen) {
     return String(str || '').trim().substring(0, maxLen).replace(/[<>]/g, '');
+}
+
+function findUserByAccount(provider, providerId) {
+    return users.find(u => Array.isArray(u.accounts) && u.accounts.some(a => a.provider === provider && a.id === providerId));
+}
+
+function addUserAccount(user, provider, providerId) {
+    if (!Array.isArray(user.accounts)) user.accounts = [];
+    if (!user.accounts.some(a => a.provider === provider)) {
+        user.accounts.push({ provider: provider, id: providerId });
+    }
+}
+
+function generateUsername(base) {
+    var clean = String(base || 'user').toLowerCase().replace(/[^a-z0-9_]/g, '').substring(0, 16);
+    if (!clean) clean = 'user';
+    if (!getUserByUsername(clean)) return clean;
+    var suffix = 2;
+    while (suffix < 1000) {
+        var name = clean.substring(0, 16 - String(suffix).length - 1) + '_' + suffix;
+        if (!getUserByUsername(name)) return name;
+        suffix++;
+    }
+    return clean + '_' + Date.now().toString(36);
+}
+
+function createOAuthUser(profile) {
+    var user = {
+        id: 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+        username: generateUsername(profile.username),
+        passwordHash: '',
+        nickname: sanitizeUserInput(profile.nickname, 16) || generateUsername(profile.username),
+        avatar: sanitizeUserInput(profile.avatar, 2048),
+        bio: '',
+        social: {},
+        accounts: [{ provider: profile.provider, id: profile.providerId }],
+        createdAt: Date.now()
+    };
+    users.push(user);
+    saveUsers();
+    return user;
 }
 
 // 静态文件
@@ -119,6 +166,183 @@ function requireAuth(req, res, next) {
     }
     next();
 }
+
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+passport.deserializeUser((id, done) => {
+    const user = getUserById(id);
+    done(null, user || false);
+});
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+const BASE_URL = process.env.BASE_URL || ('http://localhost:' + PORT);
+
+// QQ OAuth2 策略（自定义）
+class QQStrategy extends OAuth2Strategy {
+    constructor(options, verify) {
+        options.authorizationURL = options.authorizationURL || 'https://graph.qq.com/oauth2.0/authorize';
+        options.tokenURL = options.tokenURL || 'https://graph.qq.com/oauth2.0/token';
+        options.scope = options.scope || 'get_user_info';
+        options.scopeSeparator = ',';
+        super(options, verify);
+        this.name = 'qq';
+        this._appId = options.clientID;
+    }
+
+    userProfile(accessToken, done) {
+        const self = this;
+        https.get('https://graph.qq.com/oauth2.0/me?access_token=' + encodeURIComponent(accessToken), function (res) {
+            var body = '';
+            res.on('data', function (chunk) { body += chunk; });
+            res.on('end', function () {
+                try {
+                    var match = body.match(/"openid"\s*:\s*"([^"]+)"/);
+                    var openid = match ? match[1] : null;
+                    if (!openid) return done(new Error('QQ openid 解析失败'));
+                    var url = 'https://graph.qq.com/user/get_user_info?access_token=' + encodeURIComponent(accessToken) +
+                        '&oauth_consumer_key=' + encodeURIComponent(self._appId) +
+                        '&openid=' + encodeURIComponent(openid);
+                    https.get(url, function (res2) {
+                        var body2 = '';
+                        res2.on('data', function (chunk) { body2 += chunk; });
+                        res2.on('end', function () {
+                            try {
+                                var json = JSON.parse(body2);
+                                var profile = {
+                                    provider: 'qq',
+                                    id: openid,
+                                    displayName: json.nickname,
+                                    username: 'qq_' + openid.substring(0, 8),
+                                    photos: [{ value: json.figureurl_qq_2 || json.figureurl_qq_1 || '' }]
+                                };
+                                done(null, profile);
+                            } catch (e) {
+                                done(e);
+                            }
+                        });
+                    }).on('error', done);
+                } catch (e) {
+                    done(e);
+                }
+            });
+        }).on('error', done);
+    }
+}
+
+function normalizeOAuthProfile(provider, profile) {
+    var avatar = '';
+    if (profile.photos && profile.photos.length) avatar = profile.photos[0].value;
+    var username = '';
+    if (provider === 'github') username = profile.username || '';
+    if (provider === 'google') {
+        if (profile.emails && profile.emails.length) username = profile.emails[0].value.split('@')[0];
+    }
+    if (provider === 'qq') username = profile.username || '';
+    return {
+        provider: provider,
+        providerId: profile.id,
+        username: username,
+        nickname: profile.displayName || username,
+        avatar: avatar
+    };
+}
+
+function handleOAuthCallback(req, res, provider, profile) {
+    var bindUserId = req.session && req.session.bindUserId;
+    delete req.session.bindUserId;
+    if (bindUserId) {
+        var existing = getUserById(bindUserId);
+        if (existing) {
+            var already = findUserByAccount(provider, profile.id);
+            if (already && already.id !== existing.id) {
+                return res.redirect('/#/account?error=account_already_bound');
+            }
+            addUserAccount(existing, provider, profile.id);
+            if (!existing.avatar && profile.photos && profile.photos.length) {
+                existing.avatar = sanitizeUserInput(profile.photos[0].value, 2048);
+            }
+            if (!existing.nickname && profile.displayName) {
+                existing.nickname = sanitizeUserInput(profile.displayName, 16);
+            }
+            saveUsers();
+            req.session.userId = existing.id;
+            return res.redirect('/#/account?bind=success');
+        }
+    }
+
+    var user = findUserByAccount(provider, profile.id);
+    if (!user) {
+        user = createOAuthUser(normalizeOAuthProfile(provider, profile));
+    }
+    req.session.userId = user.id;
+    res.redirect('/#/');
+}
+
+function startOAuth(req, res, next, provider) {
+    if (req.session && req.session.userId) {
+        req.session.bindUserId = req.session.userId;
+    }
+    passport.authenticate(provider)(req, res, next);
+}
+
+// GitHub
+if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+    passport.use(new GitHubStrategy({
+        clientID: process.env.GITHUB_CLIENT_ID,
+        clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        callbackURL: BASE_URL + '/api/auth/github/callback'
+    }, function (accessToken, refreshToken, profile, done) {
+        done(null, profile);
+    }));
+    app.get('/api/auth/github', (req, res, next) => startOAuth(req, res, next, 'github'));
+    app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/#/account?error=github' }), (req, res) => {
+        handleOAuthCallback(req, res, 'github', req.user);
+    });
+}
+
+// Google
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(new GoogleStrategy({
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: BASE_URL + '/api/auth/google/callback'
+    }, function (accessToken, refreshToken, profile, done) {
+        done(null, profile);
+    }));
+    app.get('/api/auth/google', (req, res, next) => startOAuth(req, res, next, 'google'));
+    app.get('/api/auth/google/callback', passport.authenticate('google', { failureRedirect: '/#/account?error=google' }), (req, res) => {
+        handleOAuthCallback(req, res, 'google', req.user);
+    });
+}
+
+// QQ
+if (process.env.QQ_CLIENT_ID && process.env.QQ_CLIENT_SECRET) {
+    passport.use(new QQStrategy({
+        clientID: process.env.QQ_CLIENT_ID,
+        clientSecret: process.env.QQ_CLIENT_SECRET,
+        callbackURL: BASE_URL + '/api/auth/qq/callback'
+    }, function (accessToken, refreshToken, profile, done) {
+        done(null, profile);
+    }));
+    app.get('/api/auth/qq', (req, res, next) => startOAuth(req, res, next, 'qq'));
+    app.get('/api/auth/qq/callback', passport.authenticate('qq', { failureRedirect: '/#/account?error=qq' }), (req, res) => {
+        handleOAuthCallback(req, res, 'qq', req.user);
+    });
+}
+
+app.get('/api/auth/providers', (req, res) => {
+    res.json({
+        providers: {
+            github: !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+            google: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+            qq: !!(process.env.QQ_CLIENT_ID && process.env.QQ_CLIENT_SECRET)
+        }
+    });
+});
 
 // ROM 列表 API
 app.get('/api/roms', (req, res) => {
