@@ -321,6 +321,7 @@ function startPictionaryTurn(room, key) {
         broadcastPictionaryState(room, key);
         return;
     }
+    io.to(key).emit('pictionary:clear', { room: room.id });
     room.currentDrawer = pickNextPictionaryDrawer(room, key);
     room.currentWord = PICTIONARY_WORDS[Math.floor(Math.random() * PICTIONARY_WORDS.length)];
     room.status = 'drawing';
@@ -346,7 +347,6 @@ function endPictionaryTurn(room, key, reason) {
     }
     room.status = 'reveal';
     room.strokes = [];
-    io.to(key).emit('pictionary:clear', { room: room.id });
     broadcastPictionaryState(room, key);
     const reasonText = reason === 'timeout' ? '时间到' : (reason === 'correct' ? '有人猜对' : (reason === 'all' ? '全部猜对' : '作画者离开'));
     io.to(key).emit('pictionary:message', {
