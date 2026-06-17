@@ -5,10 +5,7 @@
 (function () {
     'use strict';
 
-    var roomId = null;
-    var nick = '';
     var canvas, ctx;
-    var chatRoom = null;
     var localStrokes = [];
     var replayTimer = null;
     var drawCore = null;
@@ -19,14 +16,8 @@
 
     function $(id) { return document.getElementById(id); }
 
-    function generateId(prefix) {
-        return (prefix || 'id') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    }
-
-    function bindOnce() {
-        var createBtn = $('oekaki-create');
+    function bindExtra() {
         var clearBtn = $('oekaki-clear');
-        var leaveBtn = $('oekaki-leave');
         var downloadBtn = $('oekaki-download');
         var replayBtn = $('oekaki-replay');
         var undoBtn = $('oekaki-undo');
@@ -36,19 +27,11 @@
         var delLayerBtn = $('oekaki-del-layer');
         var renameLayerBtn = $('oekaki-rename-layer');
 
-        if (createBtn && !createBtn._bound) {
-            createBtn._bound = true;
-            createBtn.addEventListener('click', createOrJoin);
-        }
         if (clearBtn && !clearBtn._bound) {
             clearBtn._bound = true;
             clearBtn.addEventListener('click', function () {
                 if (drawCore) drawCore.clear();
             });
-        }
-        if (leaveBtn && !leaveBtn._bound) {
-            leaveBtn._bound = true;
-            leaveBtn.addEventListener('click', leaveRoom);
         }
         if (downloadBtn && !downloadBtn._bound) {
             downloadBtn._bound = true;
@@ -103,6 +86,55 @@
         }
     }
 
+    var oekakiSession = new window.RoomSession({
+        type: 'oekaki',
+        elements: {
+            create: 'oekaki-create',
+            leave: 'oekaki-leave',
+            nick: 'oekaki-nick',
+            room: 'oekaki-room',
+            pwd: 'oekaki-pwd',
+            lobbyView: 'oekaki-lobby',
+            roomView: 'oekaki-room-view',
+            roomId: 'oekaki-room-id'
+        },
+        chatOptions: {
+            messagesId: 'oekaki-chat-messages',
+            inputId: 'oekaki-chat-input',
+            sendId: 'oekaki-chat-send',
+            usersId: 'oekaki-users',
+            onlineId: 'oekaki-online'
+        },
+        bindExtra: bindExtra,
+        onEnter: function (id, users) {
+            initDrawCore();
+            canvas = drawCore.canvas;
+            ctx = drawCore.ctx;
+            initLayers();
+            bindKeys();
+            drawCore.clear(true);
+            localStrokes = [];
+            updateUsers(users || []);
+        },
+        onLeave: function () {
+            unbindKeys();
+            if (replayTimer) {
+                clearInterval(replayTimer);
+                replayTimer = null;
+            }
+            localStrokes = [];
+            layers = [];
+            activeLayerId = null;
+            $('oekaki-users').innerHTML = '';
+            $('oekaki-chat-messages').innerHTML = '';
+        },
+        onRejoin: function () {
+            initDrawCore();
+            canvas = drawCore.canvas;
+            ctx = drawCore.ctx;
+        }
+    });
+
     function initDrawCore() {
         if (drawCore) return;
         drawCore = new window.DrawCanvas({
@@ -114,10 +146,10 @@
             defaultTextSize: 20,
             activePresetIndex: 0,
             onStroke: function (stroke) {
-                if (!roomId) return;
+                if (!oekakiSession.roomId) return;
                 var s = {
-                    id: stroke.id || generateId('stroke'),
-                    room: roomId,
+                    id: stroke.id || window.generateId('stroke'),
+                    room: oekakiSession.roomId,
                     type: stroke.tool === 'text' ? 'text' : 'line',
                     layerId: stroke.layerId || getActiveLayerId(),
                     groupId: stroke.groupId || null,
@@ -136,11 +168,11 @@
             },
             onClear: function () {
                 localStrokes = [];
-                if (roomId) window.socket.emit('oekaki:clear', { room: roomId });
+                if (oekakiSession.roomId) window.socket.emit('oekaki:clear', { room: oekakiSession.roomId });
             },
             onColorChange: function (color, alpha) {
                 overwriteActivePreset(color, alpha);
-                if (roomId) window.socket.emit('oekaki:color', { room: roomId, color: color, alpha: alpha });
+                if (oekakiSession.roomId) window.socket.emit('oekaki:color', { room: oekakiSession.roomId, color: color, alpha: alpha });
             }
         });
         drawCore.init();
@@ -182,7 +214,7 @@
     // ===== 图层工具 =====
 
     function initLayers() {
-        layers = [{ id: generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
+        layers = [{ id: window.generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
         activeLayerId = layers[0].id;
         if (drawCore) drawCore.setLayerId(activeLayerId);
         syncDrawCoreOpacity();
@@ -191,15 +223,15 @@
     }
 
     function createLayer(name, fromServer) {
-        var layer = { id: generateId('layer'), name: name || '新图层', visible: true, opacity: 1 };
+        var layer = { id: window.generateId('layer'), name: name || '新图层', visible: true, opacity: 1 };
         layers.push(layer);
         activeLayerId = layer.id;
         if (drawCore) drawCore.setLayerId(activeLayerId);
         syncDrawCoreOpacity();
         renderLayerList();
         updateLayerOpacityUI();
-        if (!fromServer && roomId) {
-            window.socket.emit('oekaki:layer:create', { room: roomId, layer: layer });
+        if (!fromServer && oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:create', { room: oekakiSession.roomId, layer: layer });
         }
         return layer;
     }
@@ -220,8 +252,8 @@
         renderLayerList();
         redrawAllStrokes();
         updateLayerOpacityUI();
-        if (roomId) {
-            window.socket.emit('oekaki:layer:delete', { room: roomId, id: deletedId });
+        if (oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:delete', { room: oekakiSession.roomId, id: deletedId });
         }
     }
 
@@ -236,8 +268,8 @@
         if (!newName || !newName.trim()) return;
         layer.name = newName.trim().substring(0, 20);
         renderLayerList();
-        if (roomId) {
-            window.socket.emit('oekaki:layer:rename', { room: roomId, id: layer.id, name: layer.name });
+        if (oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:rename', { room: oekakiSession.roomId, id: layer.id, name: layer.name });
         }
     }
 
@@ -247,8 +279,8 @@
         syncDrawCoreOpacity();
         renderLayerList();
         updateLayerOpacityUI();
-        if (!fromServer && roomId) {
-            window.socket.emit('oekaki:layer:active', { room: roomId, id: id });
+        if (!fromServer && oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:active', { room: oekakiSession.roomId, id: id });
         }
     }
 
@@ -260,8 +292,8 @@
         renderLayerList();
         redrawAllStrokes();
         if (id === activeLayerId) updateLayerOpacityUI();
-        if (!fromServer && roomId) {
-            window.socket.emit('oekaki:layer:opacity', { room: roomId, id: id, opacity: layer.opacity });
+        if (!fromServer && oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:opacity', { room: oekakiSession.roomId, id: id, opacity: layer.opacity });
         }
     }
 
@@ -271,8 +303,8 @@
         layer.visible = !layer.visible;
         renderLayerList();
         redrawAllStrokes();
-        if (!fromServer && roomId) {
-            window.socket.emit('oekaki:layer:visible', { room: roomId, id: id, visible: layer.visible });
+        if (!fromServer && oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:visible', { room: oekakiSession.roomId, id: id, visible: layer.visible });
         }
     }
 
@@ -283,8 +315,8 @@
         layers = newOrder.map(function (id) { return map[id]; }).filter(Boolean);
         renderLayerList();
         redrawAllStrokes();
-        if (!fromServer && roomId) {
-            window.socket.emit('oekaki:layer:reorder', { room: roomId, order: layers.map(function (l) { return l.id; }) });
+        if (!fromServer && oekakiSession.roomId) {
+            window.socket.emit('oekaki:layer:reorder', { room: oekakiSession.roomId, order: layers.map(function (l) { return l.id; }) });
         }
     }
 
@@ -383,7 +415,7 @@
                 visible: l.visible !== false,
                 opacity: l.opacity == null ? 1 : l.opacity
             };
-        }) : [{ id: generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
+        }) : [{ id: window.generateId('layer'), name: '图层 1', visible: true, opacity: 1 }];
         activeLayerId = newActiveId || layers[0].id;
         if (drawCore) drawCore.setLayerId(activeLayerId);
         syncDrawCoreOpacity();
@@ -411,7 +443,7 @@
     function downloadCanvas() {
         if (!canvas) return;
         var link = document.createElement('a');
-        link.download = 'oekaki-' + (roomId || 'solo') + '-' + Date.now() + '.png';
+        link.download = 'oekaki-' + (oekakiSession.roomId || 'solo') + '-' + Date.now() + '.png';
         link.href = canvas.toDataURL();
         link.click();
     }
@@ -449,12 +481,12 @@
     }
 
     function undoLastStroke() {
-        if (!roomId || localStrokes.length === 0) return;
+        if (!oekakiSession.roomId || localStrokes.length === 0) return;
         var stroke = localStrokes[localStrokes.length - 1];
         if (stroke.groupId) {
-            window.socket.emit('oekaki:undoGroup', { room: roomId, groupId: stroke.groupId });
+            window.socket.emit('oekaki:undoGroup', { room: oekakiSession.roomId, groupId: stroke.groupId });
         } else {
-            window.socket.emit('oekaki:undo', { room: roomId, id: stroke.id });
+            window.socket.emit('oekaki:undo', { room: oekakiSession.roomId, id: stroke.id });
         }
     }
 
@@ -506,7 +538,7 @@
         };
         var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         var link = document.createElement('a');
-        link.download = 'oekaki-process-' + (roomId || 'solo') + '-' + Date.now() + '.oekaki.json';
+        link.download = 'oekaki-process-' + (oekakiSession.roomId || 'solo') + '-' + Date.now() + '.oekaki.json';
         link.href = URL.createObjectURL(blob);
         link.click();
         URL.revokeObjectURL(link.href);
@@ -533,21 +565,21 @@
     }
 
     function importProcess(data) {
-        var importedLayers = data.layers && data.layers.length ? data.layers : [{ id: generateId('layer'), name: '导入图层', visible: true, opacity: 1 }];
+        var importedLayers = data.layers && data.layers.length ? data.layers : [{ id: window.generateId('layer'), name: '导入图层', visible: true, opacity: 1 }];
         importedLayers.forEach(function (l) {
             if (l.opacity == null) l.opacity = 1;
         });
         var idMap = {};
         importedLayers.forEach(function (l) {
-            var newId = generateId('layer');
+            var newId = window.generateId('layer');
             idMap[l.id] = newId;
             l.id = newId;
         });
 
         var importedStrokes = data.strokes.map(function (s) {
             var copy = JSON.parse(JSON.stringify(s));
-            copy.id = generateId('stroke') + '_' + (s.id || '');
-            copy.room = roomId;
+            copy.id = window.generateId('stroke') + '_' + (s.id || '');
+            copy.room = oekakiSession.roomId;
             copy.layerId = idMap[s.layerId] || importedLayers[0].id;
             if (copy.alpha == null) copy.alpha = 1;
             return copy;
@@ -562,68 +594,14 @@
         updateLayerOpacityUI();
         redrawAllStrokes();
 
-        if (roomId) {
+        if (oekakiSession.roomId) {
             window.socket.emit('oekaki:import', {
-                room: roomId,
+                room: oekakiSession.roomId,
                 layers: importedLayers,
                 strokes: importedStrokes,
                 activeLayerId: activeLayerId
             });
         }
-    }
-
-    function createOrJoin() {
-        nick = ($('oekaki-nick').value || '涂鸦星人').trim().substring(0, 16);
-        roomId = ($('oekaki-room').value || window.generateRoomId()).trim().toUpperCase();
-        if (!roomId) roomId = window.generateRoomId();
-        $('oekaki-room').value = roomId;
-        var pwd = ($('oekaki-pwd') && $('oekaki-pwd').value || '').trim();
-        window.socket.emit('oekaki:join', { room: roomId, nick: nick, pwd: pwd });
-    }
-
-    function enterRoom(id, users) {
-        $('oekaki-lobby').style.display = 'none';
-        $('oekaki-room-view').style.display = 'block';
-        $('oekaki-room-id').textContent = '#' + id;
-        initDrawCore();
-        canvas = drawCore.canvas;
-        ctx = drawCore.ctx;
-        initLayers();
-        bindKeys();
-        drawCore.clear(true);
-        localStrokes = [];
-        updateUsers(users || []);
-        if (!chatRoom) {
-            chatRoom = new window.ChatRoom('oekaki', id, {
-                messagesId: 'oekaki-chat-messages',
-                inputId: 'oekaki-chat-input',
-                sendId: 'oekaki-chat-send',
-                usersId: 'oekaki-users',
-                onlineId: 'oekaki-online'
-            });
-            chatRoom.init();
-        }
-        chatRoom.roomId = id;
-        chatRoom.join(nick);
-        chatRoom.updateUsers(users || []);
-    }
-
-    function leaveRoom() {
-        if (roomId) window.socket.emit('oekaki:leave', { room: roomId });
-        unbindKeys();
-        if (replayTimer) {
-            clearInterval(replayTimer);
-            replayTimer = null;
-        }
-        roomId = null;
-        chatRoom = null;
-        localStrokes = [];
-        layers = [];
-        activeLayerId = null;
-        $('oekaki-room-view').style.display = 'none';
-        $('oekaki-lobby').style.display = 'block';
-        $('oekaki-users').innerHTML = '';
-        $('oekaki-chat-messages').innerHTML = '';
     }
 
     function updateUsers(users) {
@@ -639,54 +617,38 @@
 
     function initSocketListeners() {
         if (!window.socket) return;
-        window.socket.off('oekaki:joined');
-        window.socket.off('oekaki:error');
-        window.socket.off('oekaki:stroke');
-        window.socket.off('oekaki:undo');
-        window.socket.off('oekaki:undoGroup');
-        window.socket.off('oekaki:color');
-        window.socket.off('oekaki:layer:create');
-        window.socket.off('oekaki:layer:delete');
-        window.socket.off('oekaki:layer:rename');
-        window.socket.off('oekaki:layer:active');
-        window.socket.off('oekaki:layer:visible');
-        window.socket.off('oekaki:layer:opacity');
-        window.socket.off('oekaki:layer:reorder');
-        window.socket.off('oekaki:layers');
-        window.socket.off('oekaki:import');
-        window.socket.off('oekaki:clear');
-        window.socket.off('oekaki:users');
+        var events = [
+            'oekaki:stroke', 'oekaki:undo', 'oekaki:undoGroup', 'oekaki:color',
+            'oekaki:layer:create', 'oekaki:layer:delete', 'oekaki:layer:rename',
+            'oekaki:layer:active', 'oekaki:layer:visible', 'oekaki:layer:opacity',
+            'oekaki:layer:reorder', 'oekaki:layers', 'oekaki:import', 'oekaki:clear', 'oekaki:users'
+        ];
+        events.forEach(function (evt) { window.socket.off(evt); });
 
-        window.socket.on('oekaki:joined', function (data) {
-            enterRoom(data.room, data.users);
-        });
-        window.socket.on('oekaki:error', function (data) {
-            alert('茶绘房间：' + data.message);
-        });
         window.socket.on('oekaki:stroke', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             var exists = localStrokes.some(function (s) { return s.id === data.id; });
             if (!exists) localStrokes.push(data);
             renderStroke(data);
         });
         window.socket.on('oekaki:undo', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             removeStrokeById(data.id);
         });
         window.socket.on('oekaki:undoGroup', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             removeStrokeGroup(data.groupId);
         });
         window.socket.on('oekaki:color', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             if (drawCore) drawCore.setColor(data.color, data.alpha, true);
         });
         window.socket.on('oekaki:layer:create', function (data) {
-            if (data.room !== roomId || !data.layer) return;
+            if (data.room !== oekakiSession.roomId || !data.layer) return;
             createLayer(data.layer.name, true);
         });
         window.socket.on('oekaki:layer:delete', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             var idx = layers.findIndex(function (l) { return l.id === data.id; });
             if (idx < 0) return;
             layers.splice(idx, 1);
@@ -698,21 +660,21 @@
             redrawAllStrokes();
         });
         window.socket.on('oekaki:layer:rename', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             var layer = layers.find(function (l) { return l.id === data.id; });
             if (!layer) return;
             layer.name = data.name;
             renderLayerList();
         });
         window.socket.on('oekaki:layer:active', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             activeLayerId = data.id;
             if (drawCore) drawCore.setLayerId(activeLayerId);
             renderLayerList();
             updateLayerOpacityUI();
         });
         window.socket.on('oekaki:layer:visible', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             var layer = layers.find(function (l) { return l.id === data.id; });
             if (!layer) return;
             layer.visible = data.visible;
@@ -720,7 +682,7 @@
             redrawAllStrokes();
         });
         window.socket.on('oekaki:layer:opacity', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             var layer = layers.find(function (l) { return l.id === data.id; });
             if (!layer) return;
             layer.opacity = data.opacity;
@@ -730,15 +692,15 @@
             redrawAllStrokes();
         });
         window.socket.on('oekaki:layer:reorder', function (data) {
-            if (data.room !== roomId || !Array.isArray(data.order)) return;
+            if (data.room !== oekakiSession.roomId || !Array.isArray(data.order)) return;
             reorderLayers(data.order, true);
         });
         window.socket.on('oekaki:layers', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             setLayers(data.layers, data.activeLayerId);
         });
         window.socket.on('oekaki:import', function (data) {
-            if (data.room !== roomId || !Array.isArray(data.strokes)) return;
+            if (data.room !== oekakiSession.roomId || !Array.isArray(data.strokes)) return;
             if (data.layers) {
                 data.layers.forEach(function (l) {
                     if (l.opacity == null) l.opacity = 1;
@@ -758,39 +720,17 @@
             redrawAllStrokes();
         });
         window.socket.on('oekaki:clear', function (data) {
-            if (data.room !== roomId) return;
+            if (data.room !== oekakiSession.roomId) return;
             localStrokes = [];
             clearCanvas();
         });
         window.socket.on('oekaki:users', function (data) {
-            if (data.room === roomId) updateUsers(data.users);
+            if (data.room === oekakiSession.roomId) updateUsers(data.users);
         });
     }
 
     window.initOekaki = function () {
-        bindOnce();
+        oekakiSession.init();
         initSocketListeners();
-        var query = window.currentQuery || {};
-        if (query.room && !roomId) {
-            $('oekaki-room').value = query.room;
-            if (query.pwd && $('oekaki-pwd')) $('oekaki-pwd').value = query.pwd;
-            createOrJoin();
-            return;
-        }
-
-        if (roomId) {
-            $('oekaki-lobby').style.display = 'none';
-            $('oekaki-room-view').style.display = 'block';
-            $('oekaki-room-id').textContent = '#' + roomId;
-            initDrawCore();
-            canvas = drawCore.canvas;
-            ctx = drawCore.ctx;
-            window.socket.emit('oekaki:rejoin', { room: roomId });
-            if (chatRoom) {
-                chatRoom.roomId = roomId;
-                chatRoom.bindSocket();
-                chatRoom.join(nick);
-            }
-        }
     };
 })();

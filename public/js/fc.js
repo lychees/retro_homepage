@@ -5,8 +5,6 @@
 (function () {
     'use strict';
 
-    var roomId = null;
-    var nick = '';
     var nes = null;
     var canvas, ctx, imageData;
     var controllers = { 1: {}, 2: {} };
@@ -58,24 +56,45 @@
         'Digit2': { slot: 2, button: jsnes.Controller.BUTTON_A }
     };
 
-    function bindOnce() {
-        var createBtn = $('fc-create');
+    function bindExtra() {
         var loadBtn = $('fc-load-rom');
-        var leaveBtn = $('fc-leave');
-
-        if (createBtn && !createBtn._bound) {
-            createBtn._bound = true;
-            createBtn.addEventListener('click', createOrJoin);
-        }
         if (loadBtn && !loadBtn._bound) {
             loadBtn._bound = true;
             loadBtn.addEventListener('click', loadSelectedRom);
         }
-        if (leaveBtn && !leaveBtn._bound) {
-            leaveBtn._bound = true;
-            leaveBtn.addEventListener('click', leaveRoom);
-        }
     }
+
+    var fcSession = new window.RoomSession({
+        type: 'fc',
+        elements: {
+            create: 'fc-create',
+            leave: 'fc-leave',
+            nick: 'fc-nick',
+            room: 'fc-room',
+            pwd: 'fc-pwd',
+            lobbyView: 'fc-lobby',
+            roomView: 'fc-room-view',
+            roomId: 'fc-room-id'
+        },
+        bindExtra: bindExtra,
+        onEnter: function (id, users) {
+            updateUsers(users || []);
+            loadRoms();
+            bindKeys();
+            setStatus('请选择 ROM 开始游戏');
+        },
+        onLeave: function () {
+            stopEmulator();
+            assignedSlot = 0;
+            playerSlots = [null, null];
+            $('fc-users').innerHTML = '';
+            unbindKeys();
+        },
+        onRejoin: function () {
+            loadRoms();
+            bindKeys();
+        }
+    });
 
     function initAudio() {
         if (audioCtx) {
@@ -139,35 +158,11 @@
             .catch(function (e) { console.error('加载 ROM 列表失败', e); });
     }
 
-    function createOrJoin() {
-        nick = ($('fc-nick').value || '红白机战士').trim().substring(0, 16);
-        roomId = ($('fc-room').value || window.generateRoomId()).trim().toUpperCase();
-        if (!roomId) roomId = window.generateRoomId();
-        $('fc-room').value = roomId;
-        var pwd = ($('fc-pwd') && $('fc-pwd').value || '').trim();
-        window.socket.emit('fc:join', { room: roomId, nick: nick, pwd: pwd });
-    }
-
-    function enterRoom(id, users) {
-        $('fc-lobby').style.display = 'none';
-        $('fc-room-view').style.display = 'block';
-        $('fc-room-id').textContent = '#' + id;
-        updateUsers(users || []);
-        loadRoms();
-        bindKeys();
-        setStatus('请选择 ROM 开始游戏');
-    }
-
-    function leaveRoom() {
-        stopEmulator();
-        if (roomId) window.socket.emit('fc:leave', { room: roomId });
-        roomId = null;
-        assignedSlot = 0;
-        playerSlots = [null, null];
-        $('fc-room-view').style.display = 'none';
-        $('fc-lobby').style.display = 'block';
-        $('fc-users').innerHTML = '';
-        unbindKeys();
+    function loadSelectedRom() {
+        var path = $('fc-rom-select').value;
+        if (!path) return;
+        window.socket.emit('fc:load', { room: fcSession.roomId, romPath: path });
+        setStatus('正在加载 ROM...');
     }
 
     function updateUsers(users) {
@@ -204,13 +199,6 @@
         if (playerSlots[0]) occupied++;
         if (playerSlots[1]) occupied++;
         return occupied === 1;
-    }
-
-    function loadSelectedRom() {
-        var path = $('fc-rom-select').value;
-        if (!path) return;
-        window.socket.emit('fc:load', { room: roomId, romPath: path });
-        setStatus('正在加载 ROM...');
     }
 
     function loadDefaultPalette() {
@@ -393,7 +381,7 @@
         keysPressed.add(e.code);
 
         window.socket.emit('fc:button', {
-            room: roomId,
+            room: fcSession.roomId,
             slot: map.slot,
             button: map.button,
             pressed: true
@@ -413,7 +401,7 @@
 
         e.preventDefault();
         window.socket.emit('fc:button', {
-            room: roomId,
+            room: fcSession.roomId,
             slot: map.slot,
             button: map.button,
             pressed: false
@@ -422,24 +410,16 @@
 
     function initSocketListeners() {
         if (!window.socket) return;
-        window.socket.off('fc:joined');
-        window.socket.off('fc:error');
         window.socket.off('fc:users');
         window.socket.off('fc:init');
         window.socket.off('fc:controllers');
         window.socket.off('fc:state');
 
-        window.socket.on('fc:joined', function (data) {
-            enterRoom(data.room, data.users);
-        });
-        window.socket.on('fc:error', function (data) {
-            alert('FC 游戏室：' + data.message);
-        });
         window.socket.on('fc:users', function (data) {
-            if (data.room === roomId) updateUsers(data.users);
+            if (data.room === fcSession.roomId) updateUsers(data.users);
         });
         window.socket.on('fc:init', function (data) {
-            if (data.room && data.room !== roomId) return;
+            if (data.room && data.room !== fcSession.roomId) return;
             loadFCGame(data);
         });
         window.socket.on('fc:controllers', function (data) {
@@ -466,24 +446,7 @@
     }
 
     window.initFc = function () {
-        bindOnce();
+        fcSession.init();
         initSocketListeners();
-
-        var query = window.currentQuery || {};
-        if (query.room && !roomId) {
-            $('fc-room').value = query.room;
-            if (query.pwd && $('fc-pwd')) $('fc-pwd').value = query.pwd;
-            createOrJoin();
-            return;
-        }
-
-        if (roomId) {
-            $('fc-lobby').style.display = 'none';
-            $('fc-room-view').style.display = 'block';
-            $('fc-room-id').textContent = '#' + roomId;
-            loadRoms();
-            bindKeys();
-            window.socket.emit('fc:rejoin', { room: roomId });
-        }
     };
 })();

@@ -30,8 +30,23 @@
 
 ```
 retrohomepage2/
-├── server.js                 # Express + Socket.io 服务端入口
+├── server.js                 # Express + Socket.io 启动入口（已精简）
 ├── package.json
+├── src/                      # 后端模块
+│   ├── config.js             # 配置与常量
+│   ├── store.js              # users.json / submissions.json 持久化
+│   ├── utils.js              # 通用工具函数
+│   ├── auth/                 # 账号系统、OAuth、用户资料
+│   │   └── index.js
+│   ├── gallery.js            # 画廊与投稿 API
+│   ├── roms.js               # ROM 列表与文件服务
+│   ├── socket.js             # Socket.io 事件总线
+│   └── rooms/                # 房间逻辑
+│       ├── index.js          # 房间管理（加入/离开/广播）
+│       ├── chat.js           # 通用房间内聊天
+│       ├── oekaki.js         # 茶绘事件
+│       ├── fc.js             # FC 游戏室事件与模拟器
+│       └── pictionary.js     # 你画我猜事件
 ├── public/
 │   ├── index.html            # SPA 外壳
 │   ├── css/
@@ -39,28 +54,30 @@ retrohomepage2/
 │   ├── js/
 │   │   ├── app.js            # 前端入口：星空、Socket、视图加载
 │   │   ├── router.js         # hash 路由与 query string 解析
+│   │   ├── auth.js           # 全局账号入口与登录弹窗
 │   │   ├── lobby.js          # 宇宙大厅
+│   │   ├── room-common.js    # 房间公共生命周期（加入/离开/重连/聊天）
+│   │   ├── chat-core.js      # 通用聊天组件
 │   │   ├── chat.js           # 聊天室房间页
-│   │   ├── chat-core.js      # 通用聊天组件（被三类房间复用）
-│   │   ├── auth.js           # 全局账号入口与登录/注册/设置弹窗
-│   │   ├── oekaki.js         # 茶绘房间
-│   │   ├── pictionary.js     # 你画我猜房间
+│   │   ├── draw-core.js      # 公共画板核心
+│   │   ├── oekaki.js         # 茶绘房间（模式专用逻辑）
+│   │   ├── pictionary.js     # 你画我猜房间（模式专用逻辑）
+│   │   ├── fc.js             # FC 游戏室（模式专用逻辑）
 │   │   ├── gallery.js        # 星间画廊
-│   │   ├── user.js           # 用户个人主页
-│   │   └── fc.js             # FC 游戏室
+│   │   └── user.js           # 用户个人主页
 │   └── libs/
 │       └── jsnes.js          # jsnes 模拟器（浏览器端用）
-├── views/
-│   ├── index.html            # 首页视图
-│   ├── lobby.html            # 大厅视图
-│   ├── chat.html             # 聊天室视图
-│   ├── oekaki.html           # 茶绘视图
-│   ├── pictionary.html       # 你画我猜视图
-│   ├── gallery.html          # 画廊视图
-│   ├── user.html             # 用户主页视图
-│   ├── fc.html               # FC 游戏室视图
-│   ├── links.html            # 链接集页面
-│   └── about.html            # 关于页
+├── views/                    # 视图模板
+│   ├── index.html
+│   ├── lobby.html
+│   ├── chat.html
+│   ├── oekaki.html
+│   ├── pictionary.html
+│   ├── gallery.html
+│   ├── user.html
+│   ├── fc.html
+│   ├── links.html
+│   └── about.html
 └── README.md
 ```
 
@@ -73,7 +90,7 @@ cp .env.example .env
 npm start
 ```
 
-默认监听 `http://localhost:3000`；若 3000 被占用则自动尝试 3001、3002……
+默认监听 `http://localhost:3000`；若端口被占用会提示并退出。
 
 ### 环境变量
 

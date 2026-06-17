@@ -6,8 +6,6 @@
     'use strict';
 
     var socket = null;
-    var roomId = null;
-    var nick = '';
     var users = [];
     var scores = {};
     var status = 'waiting';
@@ -26,35 +24,118 @@
 
     function $(id) { return document.getElementById(id); }
 
-    function generateId(prefix) {
-        return (prefix || 'id') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    function bindExtra() {
+        var startBtn = $('pictionary-start');
+        var guessSend = $('pictionary-guess-send');
+        var guessInput = $('pictionary-guess-input');
+        var replayBtn = $('pictionary-replay');
+        var undoBtn = $('pictionary-undo');
+        var exportBtn = $('pictionary-export');
+        var importInput = $('pictionary-import');
+        var downloadBtn = $('pictionary-download');
+        var submitBtn = $('pictionary-submit');
+
+        if (startBtn && !startBtn._bound) {
+            startBtn._bound = true;
+            startBtn.addEventListener('click', function () {
+                if (pictionarySession.roomId) socket.emit('pictionary:start', { room: pictionarySession.roomId });
+            });
+        }
+        if (guessSend && !guessSend._bound) {
+            guessSend._bound = true;
+            guessSend.addEventListener('click', sendGuess);
+        }
+        if (guessInput && !guessInput._bound) {
+            guessInput._bound = true;
+            guessInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') sendGuess();
+            });
+        }
+        if (replayBtn && !replayBtn._bound) {
+            replayBtn._bound = true;
+            replayBtn.addEventListener('click', replayStrokes);
+        }
+        if (undoBtn && !undoBtn._bound) {
+            undoBtn._bound = true;
+            undoBtn.addEventListener('click', undoLastStroke);
+        }
+        if (exportBtn && !exportBtn._bound) {
+            exportBtn._bound = true;
+            exportBtn.addEventListener('click', exportStrokes);
+        }
+        if (importInput && !importInput._bound) {
+            importInput._bound = true;
+            importInput.addEventListener('change', handleImport);
+        }
+        if (downloadBtn && !downloadBtn._bound) {
+            downloadBtn._bound = true;
+            downloadBtn.addEventListener('click', downloadCanvas);
+        }
+        if (submitBtn && !submitBtn._bound) {
+            submitBtn._bound = true;
+            submitBtn.addEventListener('click', submitToGallery);
+        }
+
+        var audioFileInput = $('pictionary-audio-file');
+        var audioPlayer = $('pictionary-audio');
+        if (audioFileInput && audioPlayer && !audioFileInput._bound) {
+            audioFileInput._bound = true;
+            audioFileInput.addEventListener('change', function (e) {
+                var file = e.target.files && e.target.files[0];
+                if (!file) return;
+                audioPlayer.src = URL.createObjectURL(file);
+                audioPlayer.play().catch(function () {});
+            });
+        }
+
+        document.addEventListener('click', initAudioCtx, { once: true });
+
+        document.addEventListener('keydown', function (e) {
+            var view = $('pictionary-room-view');
+            if (!view || view.style.display === 'none') return;
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                undoLastStroke();
+            }
+        });
     }
 
-    window.initPictionary = function () {
-        socket = window.socket;
-        bindOnce();
-        bindSocket();
-
-        var query = window.currentQuery || {};
-        if (query.room) {
-            var roomInput = $('pictionary-room');
-            var pwdInput = $('pictionary-pwd');
-            if (roomInput) roomInput.value = query.room;
-            if (pwdInput && query.pwd) pwdInput.value = query.pwd;
-            createOrJoin();
+    var pictionarySession = new window.RoomSession({
+        type: 'pictionary',
+        elements: {
+            create: 'pictionary-create',
+            leave: 'pictionary-leave',
+            nick: 'pictionary-nick',
+            room: 'pictionary-room',
+            pwd: 'pictionary-pwd',
+            lobbyView: 'pictionary-lobby',
+            roomView: 'pictionary-room-view',
+            roomId: 'pictionary-room-id'
+        },
+        bindExtra: bindExtra,
+        onEnter: function (id, userList) {
+            users = userList || [];
+            enterRoom();
+        },
+        onLeave: function () {
+            if (replayTimer) {
+                clearInterval(replayTimer);
+                replayTimer = null;
+            }
+            users = [];
+            localStrokes = [];
+            status = 'waiting';
+            isDrawer = false;
+            currentDrawerId = null;
+            $('pictionary-users').innerHTML = '';
+            $('pictionary-chat-messages').innerHTML = '';
+        },
+        onRejoin: function () {
+            if (!drawCore) return;
+            canvas = drawCore.canvas;
+            ctx = drawCore.ctx;
         }
-
-        if (socket) {
-            socket.off('connect', onSocketConnect);
-            socket.on('connect', onSocketConnect);
-        }
-    };
-
-    function onSocketConnect() {
-        if (roomId) {
-            socket.emit('pictionary:rejoin', { room: roomId, nick: nick });
-        }
-    }
+    });
 
     function initAudioCtx() {
         if (!audioCtx) {
@@ -91,107 +172,7 @@
         setTimeout(function () { playTone(1108.73, 0.35, 'square'); }, 100);
     }
 
-    function bindOnce() {
-        var createBtn = $('pictionary-create');
-        if (createBtn && !createBtn._bound) {
-            createBtn._bound = true;
-            createBtn.addEventListener('click', createOrJoin);
-        }
-        var startBtn = $('pictionary-start');
-        if (startBtn && !startBtn._bound) {
-            startBtn._bound = true;
-            startBtn.addEventListener('click', function () {
-                if (roomId) socket.emit('pictionary:start', { room: roomId });
-            });
-        }
-        var guessSend = $('pictionary-guess-send');
-        var guessInput = $('pictionary-guess-input');
-        if (guessSend && !guessSend._bound) {
-            guessSend._bound = true;
-            guessSend.addEventListener('click', sendGuess);
-        }
-        if (guessInput && !guessInput._bound) {
-            guessInput._bound = true;
-            guessInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') sendGuess();
-            });
-        }
-
-        var replayBtn = $('pictionary-replay');
-        if (replayBtn && !replayBtn._bound) {
-            replayBtn._bound = true;
-            replayBtn.addEventListener('click', replayStrokes);
-        }
-        var undoBtn = $('pictionary-undo');
-        if (undoBtn && !undoBtn._bound) {
-            undoBtn._bound = true;
-            undoBtn.addEventListener('click', undoLastStroke);
-        }
-        var exportBtn = $('pictionary-export');
-        if (exportBtn && !exportBtn._bound) {
-            exportBtn._bound = true;
-            exportBtn.addEventListener('click', exportStrokes);
-        }
-        var importInput = $('pictionary-import');
-        if (importInput && !importInput._bound) {
-            importInput._bound = true;
-            importInput.addEventListener('change', handleImport);
-        }
-        var downloadBtn = $('pictionary-download');
-        if (downloadBtn && !downloadBtn._bound) {
-            downloadBtn._bound = true;
-            downloadBtn.addEventListener('click', downloadCanvas);
-        }
-        var submitBtn = $('pictionary-submit');
-        if (submitBtn && !submitBtn._bound) {
-            submitBtn._bound = true;
-            submitBtn.addEventListener('click', submitToGallery);
-        }
-        var leaveBtn = $('pictionary-leave');
-        if (leaveBtn && !leaveBtn._bound) {
-            leaveBtn._bound = true;
-            leaveBtn.addEventListener('click', leaveRoom);
-        }
-
-        var audioFileInput = $('pictionary-audio-file');
-        var audioPlayer = $('pictionary-audio');
-        if (audioFileInput && audioPlayer && !audioFileInput._bound) {
-            audioFileInput._bound = true;
-            audioFileInput.addEventListener('change', function (e) {
-                var file = e.target.files && e.target.files[0];
-                if (!file) return;
-                audioPlayer.src = URL.createObjectURL(file);
-                audioPlayer.play().catch(function () {});
-            });
-        }
-
-        document.addEventListener('click', initAudioCtx, { once: true });
-
-        document.addEventListener('keydown', function (e) {
-            var view = $('pictionary-room-view');
-            if (!view || view.style.display === 'none') return;
-            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-                e.preventDefault();
-                undoLastStroke();
-            }
-        });
-    }
-
-    function createOrJoin() {
-        nick = ($('pictionary-nick').value || '匿名').trim().substring(0, 16);
-        roomId = ($('pictionary-room').value || window.generateRoomId()).trim().toUpperCase();
-        var pwd = ($('pictionary-pwd').value || '').trim();
-        if (!roomId) roomId = window.generateRoomId();
-        $('pictionary-room').value = roomId;
-
-        socket.emit('pictionary:join', { room: roomId, nick: nick, pwd: pwd });
-    }
-
     function enterRoom() {
-        $('pictionary-lobby').style.display = 'none';
-        $('pictionary-room-view').style.display = 'block';
-        $('pictionary-room-id').textContent = '#' + roomId;
-
         if (!drawCore) {
             drawCore = new window.DrawCanvas({
                 canvasId: 'pictionary-canvas',
@@ -202,15 +183,15 @@
                 defaultTextSize: 20,
                 readOnly: true,
                 onStroke: function (stroke) {
-                    if (!roomId || !stroke) return;
+                    if (!pictionarySession.roomId || !stroke) return;
                     if (!localStrokes.find(function (s) { return s.id === stroke.id; })) {
                         localStrokes.push(stroke);
                     }
-                    socket.emit('pictionary:stroke', Object.assign({}, stroke, { room: roomId }));
+                    socket.emit('pictionary:stroke', Object.assign({}, stroke, { room: pictionarySession.roomId }));
                 },
                 onClear: function () {
-                    if (!roomId) return;
-                    socket.emit('pictionary:clear', { room: roomId });
+                    if (!pictionarySession.roomId) return;
+                    socket.emit('pictionary:clear', { room: pictionarySession.roomId });
                 }
             });
             drawCore.init();
@@ -226,16 +207,9 @@
 
     function bindSocket() {
         if (!socket) return;
-        var events = ['pictionary:joined', 'pictionary:error', 'pictionary:users', 'pictionary:state', 'pictionary:stroke', 'pictionary:strokes:removed', 'pictionary:import', 'pictionary:clear', 'pictionary:message', 'pictionary:guessResult'];
+        var events = ['pictionary:users', 'pictionary:state', 'pictionary:stroke', 'pictionary:strokes:removed', 'pictionary:import', 'pictionary:clear', 'pictionary:message', 'pictionary:guessResult'];
         events.forEach(function (evt) { socket.off(evt); });
 
-        socket.on('pictionary:joined', function (data) {
-            users = data.users || [];
-            enterRoom();
-        });
-        socket.on('pictionary:error', function (data) {
-            alert('你画我猜：' + data.message);
-        });
         socket.on('pictionary:users', function (data) {
             users = data.users || [];
             updateOnline();
@@ -393,10 +367,10 @@
 
     function sendGuess() {
         var input = $('pictionary-guess-input');
-        if (!input || !roomId) return;
+        if (!input || !pictionarySession.roomId) return;
         var text = input.value.trim();
         if (!text) return;
-        socket.emit('pictionary:guess', { room: roomId, text: text });
+        socket.emit('pictionary:guess', { room: pictionarySession.roomId, text: text });
         input.value = '';
     }
 
@@ -426,9 +400,9 @@
     }
 
     function undoLastStroke() {
-        if (!isDrawer || status !== 'drawing' || localStrokes.length === 0 || !roomId) return;
+        if (!isDrawer || status !== 'drawing' || localStrokes.length === 0 || !pictionarySession.roomId) return;
         var stroke = localStrokes[localStrokes.length - 1];
-        socket.emit('pictionary:undo', { room: roomId, id: stroke.id });
+        socket.emit('pictionary:undo', { room: pictionarySession.roomId, id: stroke.id });
     }
 
     function removeStrokeById(id) {
@@ -448,7 +422,7 @@
         };
         var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         var link = document.createElement('a');
-        link.download = 'pictionary-process-' + (roomId || 'solo') + '-' + Date.now() + '.json';
+        link.download = 'pictionary-process-' + (pictionarySession.roomId || 'solo') + '-' + Date.now() + '.json';
         link.href = URL.createObjectURL(blob);
         link.click();
         URL.revokeObjectURL(link.href);
@@ -475,11 +449,11 @@
     }
 
     function importProcess(data) {
-        if (!isDrawer || status !== 'drawing' || !roomId) return;
+        if (!isDrawer || status !== 'drawing' || !pictionarySession.roomId) return;
         var importedStrokes = data.strokes.map(function (s) {
             var copy = JSON.parse(JSON.stringify(s));
-            copy.id = generateId('stroke') + '_' + (s.id || '');
-            copy.room = roomId;
+            copy.id = window.generateId('stroke') + '_' + (s.id || '');
+            copy.room = pictionarySession.roomId;
             if (copy.alpha == null) copy.alpha = 1;
             return copy;
         });
@@ -487,13 +461,13 @@
             localStrokes.push(s);
             drawCore.renderStroke(s);
         });
-        socket.emit('pictionary:import', { room: roomId, strokes: importedStrokes });
+        socket.emit('pictionary:import', { room: pictionarySession.roomId, strokes: importedStrokes });
     }
 
     function downloadCanvas() {
         if (!canvas) return;
         var link = document.createElement('a');
-        link.download = 'pictionary-' + (roomId || 'solo') + '-' + Date.now() + '.png';
+        link.download = 'pictionary-' + (pictionarySession.roomId || 'solo') + '-' + Date.now() + '.png';
         link.href = canvas.toDataURL();
         link.click();
     }
@@ -530,21 +504,6 @@
         });
     }
 
-    function leaveRoom() {
-        if (roomId) socket.emit('pictionary:leave', { room: roomId });
-        if (replayTimer) {
-            clearInterval(replayTimer);
-            replayTimer = null;
-        }
-        roomId = null;
-        users = [];
-        localStrokes = [];
-        $('pictionary-room-view').style.display = 'none';
-        $('pictionary-lobby').style.display = 'block';
-        $('pictionary-users').innerHTML = '';
-        $('pictionary-chat-messages').innerHTML = '';
-    }
-
     function appendMessage(data) {
         var container = $('pictionary-chat-messages');
         if (!container) return;
@@ -565,4 +524,10 @@
         div.textContent = text;
         return div.innerHTML;
     }
+
+    window.initPictionary = function () {
+        socket = window.socket;
+        pictionarySession.init();
+        bindSocket();
+    };
 })();
