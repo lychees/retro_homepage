@@ -455,7 +455,7 @@
         }
     };
 
-    DrawCanvas.prototype.setColor = function (color, alpha) {
+    DrawCanvas.prototype.setColor = function (color, alpha, silent) {
         if (typeof alpha === 'number') this.currentAlpha = Math.max(0, Math.min(1, alpha));
         this.currentColor = color;
         if (this.els.currentColorBox) {
@@ -465,7 +465,7 @@
         this.updateWheelFromColor(color);
         this.updateAlphaUI();
         this.updateRgbaUI();
-        if (this.onColorChange) this.onColorChange(color, this.currentAlpha);
+        if (this.onColorChange && !silent) this.onColorChange(color, this.currentAlpha);
     };
 
     DrawCanvas.prototype.setAlpha = function (alpha) {

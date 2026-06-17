@@ -743,7 +743,7 @@ io.on('connection', (socket) => {
         const room = rooms[key];
         if (!room || !data.color) return;
         room.currentColor = data.color;
-        io.to(key).emit('oekaki:color', { room: roomId, color: data.color });
+        socket.to(key).emit('oekaki:color', { room: roomId, color: data.color });
     });
     socket.on('oekaki:clear', (data) => {
         const roomId = (data.room || '').toString().trim().toUpperCase();

@@ -660,7 +660,7 @@
         });
         window.socket.on('oekaki:color', function (data) {
             if (data.room !== roomId) return;
-            if (drawCore) drawCore.setColor(data.color, data.alpha);
+            if (drawCore) drawCore.setColor(data.color, data.alpha, true);
         });
         window.socket.on('oekaki:layer:create', function (data) {
             if (data.room !== roomId || !data.layer) return;
@@ -751,7 +751,6 @@
     window.initOekaki = function () {
         bindOnce();
         initSocketListeners();
-
         var query = window.currentQuery || {};
         if (query.room && !roomId) {
             $('oekaki-room').value = query.room;
