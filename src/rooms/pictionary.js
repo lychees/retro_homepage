@@ -86,6 +86,12 @@ module.exports = function createPictionary(io, { rooms }) {
             room.status = 'waiting';
             room.currentDrawer = null;
             room.currentWord = '';
+            io.to(key).emit('pictionary:message', {
+                room: room.id,
+                system: true,
+                text: '至少需要 2 位玩家才能开始游戏',
+                time: Date.now()
+            });
             broadcastPictionaryState(room, key);
             return;
         }

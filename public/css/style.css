@@ -398,6 +398,25 @@ body {
     color: #ff99bb;
 }
 
+.btn.primary {
+    background: linear-gradient(180deg, #2a7050, #1a4530);
+    border-color: #00ff88;
+    color: #00ff88;
+    box-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+}
+
+.btn.primary:hover {
+    background: linear-gradient(180deg, #3a9070, #2a6050);
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.5);
+    color: #ffffff;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(0.6);
+}
+
 .btn.small {
     padding: 4px 8px;
     font-size: 14px;

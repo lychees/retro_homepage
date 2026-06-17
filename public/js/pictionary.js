@@ -213,6 +213,7 @@
         socket.on('pictionary:users', function (data) {
             users = data.users || [];
             updateOnline();
+            updateStartButton();
         });
         socket.on('pictionary:state', function (data) {
             applyState(data);
@@ -275,10 +276,7 @@
         }
         updateGuessAccess();
         updateOperationAccess();
-        var startBtn = $('pictionary-start');
-        if (startBtn) {
-            startBtn.style.display = (status === 'waiting' || status === 'reveal') ? 'block' : 'none';
-        }
+        updateStartButton();
     }
 
     function updateOnline() {
@@ -312,36 +310,71 @@
 
     function updateStatus() {
         var el = $('pictionary-status');
-        var banner = $('pictionary-drawer-banner');
         if (!el) return;
         if (status === 'waiting') {
             el.textContent = '等待开始游戏';
-            if (banner) {
-                banner.textContent = '等待开始…';
-                banner.className = 'pictionary-drawer-banner';
-            }
         } else if (status === 'drawing') {
             if (isDrawer) {
                 el.textContent = '轮到你作画，请画出题目！';
-                if (banner) {
-                    banner.textContent = '✏️ 你是当前作画者';
-                    banner.className = 'pictionary-drawer-banner self';
-                }
             } else {
                 var drawerNick = '';
                 var activeLi = document.querySelector('#pictionary-users li[data-id="' + currentDrawerId + '"]');
                 if (activeLi) drawerNick = activeLi.getAttribute('data-nick') || '';
                 el.textContent = '作画者：' + (drawerNick || '???') + '，快来猜词！';
-                if (banner) {
-                    banner.textContent = '✏️ 当前作画者：' + (drawerNick || '???');
-                    banner.className = 'pictionary-drawer-banner';
-                }
             }
         } else if (status === 'reveal') {
             el.textContent = '答案揭晓：' + (currentWord || '---');
-            if (banner) {
-                banner.textContent = '🔍 答案揭晓中';
+        }
+        updateDrawerBanner();
+    }
+
+    function updateDrawerBanner() {
+        var banner = $('pictionary-drawer-banner');
+        if (!banner) return;
+        if (status === 'waiting') {
+            banner.textContent = '等待开始…';
+            banner.className = 'pictionary-drawer-banner';
+        } else if (status === 'drawing') {
+            if (isDrawer) {
+                banner.textContent = '✏️ 你是当前作画者';
+                banner.className = 'pictionary-drawer-banner self';
+            } else {
+                var drawerNick = '';
+                var activeLi = document.querySelector('#pictionary-users li[data-id="' + currentDrawerId + '"]');
+                if (activeLi) drawerNick = activeLi.getAttribute('data-nick') || '';
+                banner.textContent = '✏️ 当前作画者：' + (drawerNick || '???');
                 banner.className = 'pictionary-drawer-banner';
+            }
+        } else if (status === 'reveal') {
+            banner.textContent = '🔍 答案揭晓中';
+            banner.className = 'pictionary-drawer-banner';
+        }
+    }
+
+    function updateStartButton() {
+        var startBtn = $('pictionary-start');
+        var banner = $('pictionary-drawer-banner');
+        if (!startBtn) return;
+        if (status !== 'waiting' && status !== 'reveal') {
+            startBtn.style.display = 'none';
+            return;
+        }
+        startBtn.style.display = 'block';
+        if (users.length < 2) {
+            startBtn.disabled = true;
+            startBtn.textContent = '至少需要 2 人';
+            startBtn.className = 'btn secondary';
+            if (banner && status === 'waiting') {
+                banner.textContent = '等待更多玩家加入…';
+                banner.className = 'pictionary-drawer-banner';
+            }
+        } else {
+            startBtn.disabled = false;
+            startBtn.textContent = '▶ 开始游戏';
+            startBtn.className = 'btn primary';
+            if (banner && status === 'waiting') {
+                banner.textContent = '点击「开始游戏」开始本轮';
+                banner.className = 'pictionary-drawer-banner self';
             }
         }
     }
