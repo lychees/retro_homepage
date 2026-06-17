@@ -35,6 +35,7 @@
         this.currentAlpha = this.options.defaultAlpha != null ? this.options.defaultAlpha : 1;
         this.currentSize = this.options.defaultSize || 4;
         this.currentTextSize = this.options.defaultTextSize || 20;
+        this.currentFont = this.options.defaultFont || 'VT323, monospace';
         this.strokeOpacity = this.options.strokeOpacity != null ? this.options.strokeOpacity : 1;
         this.zoom = 1;
         this.minZoom = 0.25;
@@ -135,6 +136,17 @@
                 '<label>文字大小</label>' +
                 '<input type="number" class="text-size-input" min="8" max="200" value="20">' +
             '</div>' +
+            '<div class="font-row" style="display:none;">' +
+                '<label>字体</label>' +
+                '<select class="font-select">' +
+                    '<option value="VT323, monospace">VT323</option>' +
+                    '<option value="monospace">等宽</option>' +
+                    '<option value="serif">衬线</option>' +
+                    '<option value="sans-serif">无衬线</option>' +
+                    '<option value="cursive">手写</option>' +
+                    '<option value="fantasy">装饰</option>' +
+                '</select>' +
+            '</div>' +
 
             '<div class="zoom-row">' +
                 '<label>画布缩放</label>' +
@@ -162,6 +174,8 @@
         this.els.brushSizeInput = root.querySelector('.brush-size-input');
         this.els.textSizeRow = root.querySelector('.text-size-row');
         this.els.textSizeInput = root.querySelector('.text-size-input');
+        this.els.fontRow = root.querySelector('.font-row');
+        this.els.fontSelect = root.querySelector('.font-select');
         this.els.zoomOut = root.querySelector('.zoom-out');
         this.els.zoomIn = root.querySelector('.zoom-in');
         this.els.zoomReset = root.querySelector('.zoom-reset');
@@ -190,6 +204,9 @@
                 self.currentTool = btn.getAttribute('data-tool');
                 if (self.els.textSizeRow) {
                     self.els.textSizeRow.style.display = self.currentTool === 'text' ? 'block' : 'none';
+                }
+                if (self.els.fontRow) {
+                    self.els.fontRow.style.display = self.currentTool === 'text' ? 'block' : 'none';
                 }
                 if (self.els.selectionActions) {
                     self.els.selectionActions.style.display = self.currentTool === 'select' ? 'flex' : 'none';
@@ -222,6 +239,7 @@
                     s.classList.toggle('active', parseInt(s.getAttribute('data-size'), 10) === self.currentSize);
                 });
             });
+            this.bindNumericWheel(this.els.brushSizeInput, { step: 1, min: 1, max: 100 });
         }
 
         if (this.els.textSizeInput && !this.els.textSizeInput._bound) {
@@ -230,6 +248,14 @@
                 var v = parseInt(self.els.textSizeInput.value, 10);
                 if (isNaN(v)) return;
                 self.currentTextSize = Math.max(8, Math.min(200, v));
+            });
+            this.bindNumericWheel(this.els.textSizeInput, { step: 1, min: 8, max: 200 });
+        }
+
+        if (this.els.fontSelect && !this.els.fontSelect._bound) {
+            this.els.fontSelect._bound = true;
+            this.els.fontSelect.addEventListener('change', function () {
+                self.currentFont = self.els.fontSelect.value || 'VT323, monospace';
             });
         }
 
@@ -293,6 +319,7 @@
                 var b = clampChannel(self.els.b.value);
                 self.setColor(rgbToHex(r, g, b), self.currentAlpha);
             });
+            self.bindNumericWheel(input, { step: 1, min: 0, max: 255 });
         });
         if (this.els.a && !this.els.a._bound) {
             this.els.a._bound = true;
@@ -301,7 +328,32 @@
                 if (isNaN(a)) return;
                 self.setAlpha(Math.max(0, Math.min(1, a)));
             });
+            this.bindNumericWheel(this.els.a, { step: 0.01, min: 0, max: 1, decimals: 2 });
         }
+    };
+
+    DrawCanvas.prototype.bindNumericWheel = function (input, options) {
+        if (!input || input._wheelBound) return;
+        input._wheelBound = true;
+        options = options || {};
+        var step = options.step || 1;
+        var min = options.min != null ? options.min : -Infinity;
+        var max = options.max != null ? options.max : Infinity;
+        var decimals = options.decimals || 0;
+        input.addEventListener('wheel', function (e) {
+            e.preventDefault();
+            var current = parseFloat(input.value);
+            if (isNaN(current)) current = 0;
+            var delta = e.deltaY > 0 ? -step : step;
+            var next = Math.max(min, Math.min(max, current + delta));
+            if (decimals > 0) {
+                next = Math.round(next * Math.pow(10, decimals)) / Math.pow(10, decimals);
+            } else {
+                next = Math.round(next);
+            }
+            input.value = next;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }, { passive: false });
     };
 
     DrawCanvas.prototype.bindColorWheel = function () {
@@ -446,6 +498,9 @@
         this.currentTool = tool;
         if (this.els.textSizeRow) {
             this.els.textSizeRow.style.display = tool === 'text' ? 'block' : 'none';
+        }
+        if (this.els.fontRow) {
+            this.els.fontRow.style.display = tool === 'text' ? 'block' : 'none';
         }
         if (this.els.selectionActions) {
             this.els.selectionActions.style.display = tool === 'select' ? 'flex' : 'none';
@@ -818,6 +873,7 @@
             color: this.currentColor,
             size: this.currentTextSize,
             alpha: this.currentAlpha,
+            fontFamily: this.currentFont,
             tool: 'text'
         };
         this.renderStroke(stroke, this.strokeOpacity);
@@ -840,7 +896,7 @@
             this.ctx.save();
             this.ctx.globalAlpha = (stroke.alpha == null ? 1 : stroke.alpha) * layerOpacity;
             this.ctx.fillStyle = stroke.color || '#000000';
-            this.ctx.font = 'bold ' + Math.max(stroke.size || 20, 12) + 'px VT323, monospace';
+            this.ctx.font = 'bold ' + Math.max(stroke.size || 20, 12) + 'px ' + (stroke.fontFamily || 'VT323, monospace');
             this.ctx.textBaseline = 'top';
             this.ctx.fillText(stroke.text, stroke.x, stroke.y);
             this.ctx.restore();

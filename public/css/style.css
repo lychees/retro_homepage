@@ -994,7 +994,8 @@ input[type="text"]:focus, select:focus {
 }
 
 .size-input-row,
-.text-size-row {
+.text-size-row,
+.font-row {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -1013,6 +1014,18 @@ input[type="text"]:focus, select:focus {
     border: 1px solid #5555aa;
     border-radius: 3px;
     text-align: center;
+}
+
+.font-row select {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 14px;
+    color: #e0e0ff;
+    background: rgba(20, 20, 50, 0.8);
+    border: 1px solid #5555aa;
+    border-radius: 3px;
+    text-align: center;
+    cursor: pointer;
 }
 
 .zoom-row {
