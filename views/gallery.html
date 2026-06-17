@@ -26,6 +26,18 @@
         <div class="gallery-modal-info">
             <h3 id="gallery-modal-title"></h3>
             <p>作者：<span id="gallery-modal-author"></span> · 投稿时间：<span id="gallery-modal-time"></span></p>
+            <div class="gallery-modal-actions">
+                <button class="btn small" id="gallery-modal-like">❤️ 点赞 <span id="gallery-modal-like-count">0</span></button>
+            </div>
+            <div class="gallery-modal-comments">
+                <h4>评论</h4>
+                <ul id="gallery-modal-comment-list"></ul>
+                <div class="gallery-comment-form">
+                    <input type="text" id="gallery-comment-author" placeholder="昵称" maxlength="16">
+                    <input type="text" id="gallery-comment-text" placeholder="写下你的评论…" maxlength="200">
+                    <button class="btn small" id="gallery-comment-submit">发送</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -49,6 +61,17 @@
 .gallery-modal-info { margin-top: 12px; text-align: center; }
 .gallery-modal-info h3 { margin: 0 0 6px; color: #00ffff; }
 .gallery-modal-info p { margin: 0; color: #a0a0ff; font-size: 14px; }
+.gallery-modal-actions { margin-top: 12px; }
+.gallery-modal-comments { margin-top: 16px; text-align: left; min-width: 280px; max-width: 80vw; }
+.gallery-modal-comments h4 { margin: 0 0 8px; color: #00ffff; font-size: 15px; border-bottom: 1px dashed #5555aa; padding-bottom: 6px; }
+.gallery-modal-comments ul { list-style: none; padding: 0; margin: 0 0 10px; max-height: 160px; overflow-y: auto; }
+.gallery-modal-comments li { padding: 6px 0; border-bottom: 1px solid rgba(85,85,170,0.3); font-size: 13px; color: #c0c0ff; }
+.gallery-modal-comments li:last-child { border-bottom: none; }
+.gallery-modal-comments .comment-author { color: #ff66cc; margin-right: 6px; }
+.gallery-modal-comments .comment-time { color: #8888cc; font-size: 11px; margin-left: 6px; }
+.gallery-comment-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.gallery-comment-form input { flex: 1; min-width: 120px; padding: 6px 8px; background: rgba(10,10,30,0.8); border: 1px solid #5555aa; color: #e0e0ff; border-radius: 3px; }
+#gallery-modal-like.liked { background: #ff66cc; color: #ffffff; }
 </style>
 
 <script>

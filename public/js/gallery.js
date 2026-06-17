@@ -15,6 +15,7 @@
     var filterType = 'all';
     var allItems = [];
     var loadedIds = {};
+    var currentDetailId = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -111,11 +112,113 @@
     function openModal(id) {
         var item = allItems.find(function (i) { return i.id === id; });
         if (!item) return;
+        currentDetailId = id;
         $('gallery-modal-img').src = item.thumbnail || '';
         $('gallery-modal-title').textContent = item.title;
         $('gallery-modal-author').textContent = item.author || '匿名';
         $('gallery-modal-time').textContent = formatTime(item.timestamp);
+        renderDetail({ likes: item.likes || 0, comments: item.comments || [] });
+        bindDetailActions();
+        loadDetail(id);
         if (modal) modal.style.display = 'flex';
+    }
+
+    function loadDetail(id) {
+        fetch('/api/gallery/' + id)
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.id !== currentDetailId) return;
+                renderDetail({ likes: data.likes || 0, comments: data.comments || [] });
+            })
+            .catch(function (err) { console.error('[gallery] detail load failed', err); });
+    }
+
+    function renderDetail(detail) {
+        var likeBtn = $('gallery-modal-like');
+        var likeCount = $('gallery-modal-like-count');
+        if (likeCount && typeof detail.likes === 'number') likeCount.textContent = detail.likes;
+        if (likeBtn) {
+            var liked = localStorage.getItem('gallery_liked_' + currentDetailId) === '1';
+            likeBtn.classList.toggle('liked', liked);
+            likeBtn.disabled = liked;
+        }
+        if (!detail.comments) return;
+        var list = $('gallery-modal-comment-list');
+        if (!list) return;
+        list.innerHTML = '';
+        var comments = detail.comments || [];
+        if (comments.length === 0) {
+            list.innerHTML = '<li style="color:#8888cc;">还没有评论，来说点什么吧～</li>';
+            return;
+        }
+        comments.forEach(function (c) {
+            var li = document.createElement('li');
+            li.innerHTML = '<span class="comment-author">' + escapeHtml(c.author) + '：</span>' +
+                escapeHtml(c.text) +
+                '<span class="comment-time">' + formatTime(c.timestamp) + '</span>';
+            list.appendChild(li);
+        });
+    }
+
+    function bindDetailActions() {
+        var likeBtn = $('gallery-modal-like');
+        if (likeBtn && !likeBtn._bound) {
+            likeBtn._bound = true;
+            likeBtn.addEventListener('click', function () {
+                if (!currentDetailId) return;
+                if (localStorage.getItem('gallery_liked_' + currentDetailId) === '1') return;
+                fetch('/api/gallery/' + currentDetailId + '/like', { method: 'POST' })
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (data.likes != null) {
+                            localStorage.setItem('gallery_liked_' + currentDetailId, '1');
+                            var item = allItems.find(function (i) { return i.id === currentDetailId; });
+                            if (item) item.likes = data.likes;
+                            renderDetail({ likes: data.likes });
+                        }
+                    })
+                    .catch(function (err) { console.error('[gallery] like failed', err); });
+            });
+        }
+        var submitBtn = $('gallery-comment-submit');
+        if (submitBtn && !submitBtn._bound) {
+            submitBtn._bound = true;
+            submitBtn.addEventListener('click', submitComment);
+        }
+        var textInput = $('gallery-comment-text');
+        if (textInput && !textInput._bound) {
+            textInput._bound = true;
+            textInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') submitComment();
+            });
+        }
+    }
+
+    function submitComment() {
+        if (!currentDetailId) return;
+        var authorInput = $('gallery-comment-author');
+        var textInput = $('gallery-comment-text');
+        var text = textInput ? textInput.value.trim() : '';
+        if (!text) return;
+        var author = authorInput ? authorInput.value.trim() : '';
+        fetch('/api/gallery/' + currentDetailId + '/comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ author: author, text: text })
+        })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (data.comment) {
+                    var item = allItems.find(function (i) { return i.id === currentDetailId; });
+                    if (item) {
+                        if (!item.comments) item.comments = [];
+                        item.comments.push(data.comment);
+                    }
+                    if (textInput) textInput.value = '';
+                    loadDetail(currentDetailId);
+                }
+            })
+            .catch(function (err) { console.error('[gallery] comment failed', err); });
     }
 
     function closeModal() {

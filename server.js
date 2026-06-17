@@ -113,8 +113,41 @@ app.get('/api/gallery/:id', (req, res) => {
         title: item.title,
         author: item.author,
         imageData: item.imageData,
-        timestamp: item.timestamp
+        timestamp: item.timestamp,
+        likes: item.likes || 0,
+        comments: (item.comments || []).map(c => ({
+            author: c.author,
+            text: c.text,
+            timestamp: c.timestamp
+        }))
     });
+});
+
+app.post('/api/gallery/:id/like', (req, res) => {
+    const item = submissions.find(s => s.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    item.likes = (item.likes || 0) + 1;
+    saveSubmissions();
+    res.json({ id: item.id, likes: item.likes });
+});
+
+app.post('/api/gallery/:id/comment', (req, res) => {
+    const item = submissions.find(s => s.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    const { author, text } = req.body || {};
+    const cleanText = String(text || '').trim();
+    if (!cleanText) return res.status(400).json({ error: '评论内容不能为空' });
+    if (cleanText.length > 200) return res.status(400).json({ error: '评论内容过长' });
+    const comment = {
+        author: String(author || '匿名').trim().substring(0, 16) || '匿名',
+        text: cleanText,
+        timestamp: Date.now()
+    };
+    if (!item.comments) item.comments = [];
+    item.comments.push(comment);
+    if (item.comments.length > 100) item.comments = item.comments.slice(item.comments.length - 100);
+    saveSubmissions();
+    res.json({ id: item.id, comment });
 });
 
 app.post('/api/submit', (req, res) => {
@@ -132,7 +165,9 @@ app.post('/api/submit', (req, res) => {
         author: String(author || '匿名').trim().substring(0, 16),
         imageData: imageData,
         thumbnail: createThumbnail(imageData),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        likes: 0,
+        comments: []
     };
     submissions.push(submission);
     if (submissions.length > MAX_SUBMISSIONS) {
