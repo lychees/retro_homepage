@@ -12,6 +12,28 @@
         { color: '#ff00ff', alpha: 1 }, { color: '#00ffff', alpha: 1 }
     ];
 
+    var activeWheelInput = null;
+    document.addEventListener('wheel', function (e) {
+        if (!activeWheelInput) return;
+        e.preventDefault();
+        var options = activeWheelInput._wheelOptions || {};
+        var step = options.step || 1;
+        var min = options.min != null ? options.min : -Infinity;
+        var max = options.max != null ? options.max : Infinity;
+        var decimals = options.decimals || 0;
+        var current = parseFloat(activeWheelInput.value);
+        if (isNaN(current)) current = 0;
+        var delta = e.deltaY > 0 ? -step : step;
+        var next = Math.max(min, Math.min(max, current + delta));
+        if (decimals > 0) {
+            next = Math.round(next * Math.pow(10, decimals)) / Math.pow(10, decimals);
+        } else {
+            next = Math.round(next);
+        }
+        activeWheelInput.value = next;
+        activeWheelInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }, { passive: false });
+
     function $(id) { return document.getElementById(id); }
 
     function DrawCanvas(options) {
@@ -335,25 +357,13 @@
     DrawCanvas.prototype.bindNumericWheel = function (input, options) {
         if (!input || input._wheelBound) return;
         input._wheelBound = true;
-        options = options || {};
-        var step = options.step || 1;
-        var min = options.min != null ? options.min : -Infinity;
-        var max = options.max != null ? options.max : Infinity;
-        var decimals = options.decimals || 0;
-        input.addEventListener('wheel', function (e) {
-            e.preventDefault();
-            var current = parseFloat(input.value);
-            if (isNaN(current)) current = 0;
-            var delta = e.deltaY > 0 ? -step : step;
-            var next = Math.max(min, Math.min(max, current + delta));
-            if (decimals > 0) {
-                next = Math.round(next * Math.pow(10, decimals)) / Math.pow(10, decimals);
-            } else {
-                next = Math.round(next);
-            }
-            input.value = next;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }, { passive: false });
+        input._wheelOptions = options || {};
+        input.addEventListener('focus', function () {
+            activeWheelInput = input;
+        });
+        input.addEventListener('blur', function () {
+            if (activeWheelInput === input) activeWheelInput = null;
+        });
     };
 
     DrawCanvas.prototype.bindColorWheel = function () {

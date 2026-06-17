@@ -11,26 +11,28 @@ with sync_playwright() as p:
     page.wait_for_selector("#oekaki-room-view", state="visible", timeout=5000)
     page.wait_for_timeout(500)
 
-    # wheel on rgba-r
+    # wheel on focused rgba-r while mouse is elsewhere (over canvas)
     page.click("#oekaki-draw-tools .rgba-r")
     page.wait_for_timeout(100)
     before = page.input_value("#oekaki-draw-tools .rgba-r")
-    page.locator("#oekaki-draw-tools .rgba-r").hover()
+    # move mouse onto canvas, away from the input
+    box = page.locator("#oekaki-canvas").bounding_box()
+    page.mouse.move(box['x']+box['width']/2, box['y']+box['height']/2)
     page.mouse.wheel(0, -3)
     page.wait_for_timeout(200)
     after = page.input_value("#oekaki-draw-tools .rgba-r")
-    print("rgba-r before/after wheel", before, after)
+    print("rgba-r before/after wheel (mouse on canvas)", before, after)
     assert int(after) > int(before)
 
-    # wheel on brush-size-input
+    # wheel on focused brush-size-input while mouse is elsewhere
     page.click("#oekaki-draw-tools .brush-size-input")
     page.wait_for_timeout(100)
     before = page.input_value("#oekaki-draw-tools .brush-size-input")
-    page.locator("#oekaki-draw-tools .brush-size-input").hover()
+    page.mouse.move(box['x']+box['width']/2, box['y']+box['height']/2)
     page.mouse.wheel(0, 3)
     page.wait_for_timeout(200)
     after = page.input_value("#oekaki-draw-tools .brush-size-input")
-    print("brush-size before/after wheel", before, after)
+    print("brush-size before/after wheel (mouse on canvas)", before, after)
     assert int(after) < int(before)
 
     # select text tool and font
