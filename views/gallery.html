@@ -22,12 +22,17 @@
     <div class="gallery-modal-backdrop" id="gallery-modal-backdrop"></div>
     <div class="gallery-modal-content">
         <button class="gallery-modal-close" id="gallery-modal-close">×</button>
-        <img id="gallery-modal-img" src="" alt="">
+        <div class="gallery-modal-media">
+            <img id="gallery-modal-img" src="" alt="">
+            <canvas id="gallery-replay-canvas" style="display:none;"></canvas>
+        </div>
         <div class="gallery-modal-info">
             <h3 id="gallery-modal-title"></h3>
             <p>作者：<span id="gallery-modal-author"></span> · 投稿时间：<span id="gallery-modal-time"></span></p>
             <div class="gallery-modal-actions">
                 <button class="btn small" id="gallery-modal-like">❤️ 点赞 <span id="gallery-modal-like-count">0</span></button>
+                <button class="btn small" id="gallery-modal-replay" style="display:none;">🎬 回放过程</button>
+                <button class="btn small" id="gallery-modal-export" style="display:none;">📤 导出过程</button>
             </div>
             <div class="gallery-modal-comments">
                 <h4>评论</h4>
@@ -58,9 +63,13 @@
 .gallery-modal-content { position: relative; max-width: 90vw; max-height: 90vh; background: rgba(20,20,50,0.96); border: 2px solid #00ffff; border-radius: 8px; padding: 16px; box-shadow: 0 0 30px rgba(0,255,255,0.3); }
 .gallery-modal-content img { max-width: 80vw; max-height: 70vh; display: block; margin: 0 auto; border-radius: 4px; background: #080820; }
 .gallery-modal-close { position: absolute; top: 6px; right: 10px; background: transparent; border: none; color: #ff66cc; font-size: 28px; cursor: pointer; }
+.gallery-modal-media { position: relative; display: flex; align-items: center; justify-content: center; }
+.gallery-modal-media img { max-width: 80vw; max-height: 70vh; display: block; border-radius: 4px; background: #080820; }
+#gallery-replay-canvas { display: none; max-width: 80vw; max-height: 70vh; background: #ffffff; border-radius: 4px; }
 .gallery-modal-info { margin-top: 12px; text-align: center; }
 .gallery-modal-info h3 { margin: 0 0 6px; color: #00ffff; }
 .gallery-modal-info p { margin: 0; color: #a0a0ff; font-size: 14px; }
+.gallery-modal-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .gallery-modal-actions { margin-top: 12px; }
 .gallery-modal-comments { margin-top: 16px; text-align: left; min-width: 280px; max-width: 80vw; }
 .gallery-modal-comments h4 { margin: 0 0 8px; color: #00ffff; font-size: 15px; border-bottom: 1px dashed #5555aa; padding-bottom: 6px; }

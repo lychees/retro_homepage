@@ -119,7 +119,9 @@ app.get('/api/gallery/:id', (req, res) => {
             author: c.author,
             text: c.text,
             timestamp: c.timestamp
-        }))
+        })),
+        strokes: item.strokes || [],
+        canvas: item.canvas || { width: 640, height: 480 }
     });
 });
 
@@ -151,7 +153,7 @@ app.post('/api/gallery/:id/comment', (req, res) => {
 });
 
 app.post('/api/submit', (req, res) => {
-    const { type, title, author, imageData } = req.body || {};
+    const { type, title, author, imageData, strokes, canvas } = req.body || {};
     if (!imageData || !imageData.startsWith('data:image')) {
         return res.status(400).json({ error: '无效的图片数据' });
     }
@@ -167,7 +169,11 @@ app.post('/api/submit', (req, res) => {
         thumbnail: createThumbnail(imageData),
         timestamp: Date.now(),
         likes: 0,
-        comments: []
+        comments: [],
+        strokes: Array.isArray(strokes) ? strokes : [],
+        canvas: canvas && typeof canvas.width === 'number' && typeof canvas.height === 'number'
+            ? { width: canvas.width, height: canvas.height }
+            : { width: 640, height: 480 }
     };
     submissions.push(submission);
     if (submissions.length > MAX_SUBMISSIONS) {

@@ -415,7 +415,14 @@
         fetch('/api/submit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'oekaki', title: title, author: author, imageData: imageData })
+            body: JSON.stringify({
+                type: 'oekaki',
+                title: title,
+                author: author,
+                imageData: imageData,
+                strokes: localStrokes,
+                canvas: { width: canvas.width, height: canvas.height }
+            })
         }).then(function (res) { return res.json(); }).then(function (data) {
             if (data && data.success) {
                 alert('投稿成功！请到「画廊」欣赏大家的作品。');
