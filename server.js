@@ -283,11 +283,11 @@ function handleOAuthCallback(req, res, provider, profile) {
     res.redirect('/#/');
 }
 
-function startOAuth(req, res, next, provider) {
+function startOAuth(req, res, next, provider, options) {
     if (req.session && req.session.userId) {
         req.session.bindUserId = req.session.userId;
     }
-    passport.authenticate(provider)(req, res, next);
+    passport.authenticate(provider, options || {})(req, res, next);
 }
 
 // GitHub
@@ -299,7 +299,7 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
     }, function (accessToken, refreshToken, profile, done) {
         done(null, profile);
     }));
-    app.get('/api/auth/github', (req, res, next) => startOAuth(req, res, next, 'github'));
+    app.get('/api/auth/github', (req, res, next) => startOAuth(req, res, next, 'github', { scope: ['read:user'] }));
     app.get('/api/auth/github/callback', passport.authenticate('github', { failureRedirect: '/#/account?error=github' }), (req, res) => {
         handleOAuthCallback(req, res, 'github', req.user);
     });
@@ -314,7 +314,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     }, function (accessToken, refreshToken, profile, done) {
         done(null, profile);
     }));
-    app.get('/api/auth/google', (req, res, next) => startOAuth(req, res, next, 'google'));
+    app.get('/api/auth/google', (req, res, next) => startOAuth(req, res, next, 'google', { scope: ['profile', 'email'] }));
     app.get('/api/auth/google/callback', passport.authenticate('google', { failureRedirect: '/#/account?error=google' }), (req, res) => {
         handleOAuthCallback(req, res, 'google', req.user);
     });
