@@ -89,9 +89,11 @@
                     return '<a class="auth-oauth-btn auth-oauth-' + p + '" href="/api/auth/' + p + '">' +
                         '<span class="auth-oauth-icon">' + icons[p] + '</span> ' + names[p] + ' 登录' +
                     '</a>';
-                }).join('');
+                }).join('') +
+                '<div class="auth-hint">点击上方按钮登录；首次登录将自动创建账号。</div>';
         } else if (loginBox) {
-            loginBox.innerHTML = '';
+            loginBox.innerHTML = '<div class="auth-oauth-title">暂未开启第三方登录</div>' +
+                '<div class="auth-hint">管理员未配置 OAuth 提供方。</div>';
         }
 
         var bindBox = document.getElementById('auth-oauth-bind');
@@ -149,7 +151,6 @@
             '</div>' +
             '<div class="auth-panel active" data-panel="login">' +
                 '<div class="auth-oauth" id="auth-oauth-login"></div>' +
-                '<div class="auth-hint">请使用上方第三方账号登录；登录即自动创建账号。</div>' +
                 '<div class="auth-error" id="auth-login-error"></div>' +
             '</div>' +
             '<div class="auth-panel" data-panel="profile">' +
