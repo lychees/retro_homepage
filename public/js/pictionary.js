@@ -312,20 +312,37 @@
 
     function updateStatus() {
         var el = $('pictionary-status');
+        var banner = $('pictionary-drawer-banner');
         if (!el) return;
         if (status === 'waiting') {
             el.textContent = '等待开始游戏';
+            if (banner) {
+                banner.textContent = '等待开始…';
+                banner.className = 'pictionary-drawer-banner';
+            }
         } else if (status === 'drawing') {
             if (isDrawer) {
                 el.textContent = '轮到你作画，请画出题目！';
+                if (banner) {
+                    banner.textContent = '✏️ 你是当前作画者';
+                    banner.className = 'pictionary-drawer-banner self';
+                }
             } else {
                 var drawerNick = '';
                 var activeLi = document.querySelector('#pictionary-users li[data-id="' + currentDrawerId + '"]');
                 if (activeLi) drawerNick = activeLi.getAttribute('data-nick') || '';
                 el.textContent = '作画者：' + (drawerNick || '???') + '，快来猜词！';
+                if (banner) {
+                    banner.textContent = '✏️ 当前作画者：' + (drawerNick || '???');
+                    banner.className = 'pictionary-drawer-banner';
+                }
             }
         } else if (status === 'reveal') {
             el.textContent = '答案揭晓：' + (currentWord || '---');
+            if (banner) {
+                banner.textContent = '🔍 答案揭晓中';
+                banner.className = 'pictionary-drawer-banner';
+            }
         }
     }
 
@@ -338,7 +355,9 @@
             var li = document.createElement('li');
             li.setAttribute('data-id', s.id);
             li.setAttribute('data-nick', s.nick);
-            var marker = s.id === currentDrawerId ? '✏️ ' : '✦ ';
+            var isCurrentDrawer = s.id === currentDrawerId && status === 'drawing';
+            if (isCurrentDrawer) li.className = 'active';
+            var marker = isCurrentDrawer ? '✏️ ' : '✦ ';
             li.textContent = marker + s.nick + ' · ' + s.score + ' 分';
             ul.appendChild(li);
         });

@@ -912,6 +912,37 @@ input[type="text"]:focus, select:focus {
     pointer-events: none;
 }
 
+.pictionary-drawer-banner {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(180deg, #2a2a70, #1a1a45);
+    border: 2px solid #ff66cc;
+    color: #ffccff;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 8px #ff66cc;
+    box-shadow: 0 0 15px rgba(255, 102, 204, 0.4);
+    pointer-events: none;
+    z-index: 5;
+    white-space: nowrap;
+}
+
+.pictionary-drawer-banner.self {
+    border-color: #00ffff;
+    color: #00ffff;
+    text-shadow: 0 0 8px #00ffff;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+
+.pictionary-users li.active {
+    color: #00ffff;
+    text-shadow: 0 0 6px rgba(0, 255, 255, 0.5);
+}
+
 .pictionary-users,
 .pictionary-chat {
     background: rgba(20, 20, 45, 0.8);
