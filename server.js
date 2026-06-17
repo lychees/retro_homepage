@@ -2,6 +2,7 @@
  * 星間茶室 - 服务端
  * Express + Socket.io
  */
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const https = require('https');

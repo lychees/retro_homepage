@@ -68,6 +68,8 @@ retrohomepage2/
 
 ```bash
 npm install
+# 创建环境变量文件（必须设置 SESSION_SECRET）
+cp .env.example .env
 npm start
 ```
 
@@ -75,15 +77,23 @@ npm start
 
 ### 环境变量
 
-复制 `.env.example` 为 `.env` 并填写需要的配置：
+项目使用 `dotenv` 自动加载 `.env`。复制 `.env.example` 后，至少需要填写 `SESSION_SECRET`：
 
 ```bash
 cp .env.example .env
 ```
 
+生成强随机密钥：
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+把生成的字符串填入 `.env` 的 `SESSION_SECRET`。
+
 | 变量 | 说明 |
 |------|------|
-| `SESSION_SECRET` | 会话密钥（生产环境必填） |
+| `SESSION_SECRET` | 会话 Cookie 签名密钥（必填） |
 | `BASE_URL` | 站点根地址，用于 OAuth 回调（默认 `http://localhost:3000`） |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth 应用凭证 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth 应用凭证 |
