@@ -507,39 +507,9 @@ function createThumbnail(imageData) {
 
 // ==================== 账号系统 ====================
 
-app.post('/api/auth/register', async (req, res) => {
-    const { username, password, nickname } = req.body || {};
-    const cleanUsername = sanitizeUserInput(username, 32).toLowerCase();
-    const cleanNickname = sanitizeUserInput(nickname, 16) || cleanUsername;
-    if (!/^[a-z0-9_]{3,20}$/.test(cleanUsername)) {
-        return res.status(400).json({ error: '用户名需为 3-20 位小写字母、数字或下划线' });
-    }
-    if (!password || String(password).length < 6) {
-        return res.status(400).json({ error: '密码至少需要 6 位' });
-    }
-    if (getUserByUsername(cleanUsername)) {
-        return res.status(409).json({ error: '用户名已被注册' });
-    }
-    try {
-        const hash = await hashPassword(password);
-        const user = {
-            id: 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
-            username: cleanUsername,
-            passwordHash: hash,
-            nickname: cleanNickname,
-            avatar: '',
-            bio: '',
-            social: {},
-            createdAt: Date.now()
-        };
-        users.push(user);
-        saveUsers();
-        req.session.userId = user.id;
-        res.json({ user: publicUser(user) });
-    } catch (e) {
-        console.error('注册失败:', e);
-        res.status(500).json({ error: '注册失败' });
-    }
+// 账号仅通过第三方 OAuth 创建/登录，不再提供账号密码注册
+app.post('/api/auth/register', (req, res) => {
+    res.status(403).json({ error: '本站已关闭账号密码注册，请使用第三方账号登录。' });
 });
 
 app.post('/api/auth/login', async (req, res) => {

@@ -35,24 +35,6 @@
         });
     }
 
-    function login(username, password) {
-        return api('/auth/login', { method: 'POST', body: { username: username, password: password } }).then(function (data) {
-            window.currentUser = data.user || null;
-            renderAuthWidget();
-            renderOAuthButtons();
-            return window.currentUser;
-        });
-    }
-
-    function register(username, password, nickname) {
-        return api('/auth/register', { method: 'POST', body: { username: username, password: password, nickname: nickname } }).then(function (data) {
-            window.currentUser = data.user || null;
-            renderAuthWidget();
-            renderOAuthButtons();
-            return window.currentUser;
-        });
-    }
-
     function logout() {
         return api('/auth/logout', { method: 'POST' }).then(function () {
             window.currentUser = null;
@@ -163,22 +145,12 @@
             '<div class="modal-header">账号 <button class="modal-close" id="auth-modal-close">×</button></div>' +
             '<div class="auth-tabs">' +
                 '<button class="auth-tab active" data-tab="login">登录</button>' +
-                '<button class="auth-tab" data-tab="register">注册</button>' +
                 '<button class="auth-tab" data-tab="profile">资料</button>' +
             '</div>' +
             '<div class="auth-panel active" data-panel="login">' +
-                '<label>用户名</label><input type="text" id="auth-login-username" maxlength="20" placeholder="小写字母/数字/下划线">' +
-                '<label>密码</label><input type="password" id="auth-login-password" placeholder="密码">' +
-                '<div class="auth-error" id="auth-login-error"></div>' +
-                '<button class="auth-submit" id="auth-login-btn">登录</button>' +
                 '<div class="auth-oauth" id="auth-oauth-login"></div>' +
-            '</div>' +
-            '<div class="auth-panel" data-panel="register">' +
-                '<label>用户名</label><input type="text" id="auth-reg-username" maxlength="20" placeholder="3-20 位">' +
-                '<label>昵称</label><input type="text" id="auth-reg-nickname" maxlength="16" placeholder="显示名称">' +
-                '<label>密码</label><input type="password" id="auth-reg-password" placeholder="至少 6 位">' +
-                '<div class="auth-error" id="auth-reg-error"></div>' +
-                '<button class="auth-submit" id="auth-reg-btn">注册</button>' +
+                '<div class="auth-hint">请使用上方第三方账号登录；登录即自动创建账号。</div>' +
+                '<div class="auth-error" id="auth-login-error"></div>' +
             '</div>' +
             '<div class="auth-panel" data-panel="profile">' +
                 '<div id="auth-profile-guest">请先登录。</div>' +
@@ -217,31 +189,6 @@
                     fillProfileForm();
                     renderOAuthButtons();
                 }
-            });
-        });
-
-        modal.querySelector('#auth-login-btn').addEventListener('click', function () {
-            var u = document.getElementById('auth-login-username').value.trim();
-            var p = document.getElementById('auth-login-password').value;
-            document.getElementById('auth-login-error').textContent = '';
-            login(u, p).then(function () {
-                hideModal();
-                switchTab('profile');
-            }).catch(function (e) {
-                document.getElementById('auth-login-error').textContent = e.message;
-            });
-        });
-
-        modal.querySelector('#auth-reg-btn').addEventListener('click', function () {
-            var u = document.getElementById('auth-reg-username').value.trim().toLowerCase();
-            var n = document.getElementById('auth-reg-nickname').value.trim();
-            var p = document.getElementById('auth-reg-password').value;
-            document.getElementById('auth-reg-error').textContent = '';
-            register(u, p, n).then(function () {
-                hideModal();
-                switchTab('profile');
-            }).catch(function (e) {
-                document.getElementById('auth-reg-error').textContent = e.message;
             });
         });
 
@@ -377,8 +324,6 @@
 
     window.Auth = {
         fetchMe: fetchMe,
-        login: login,
-        register: register,
         logout: logout,
         updateProfile: updateProfile,
         updateSocial: updateSocial,

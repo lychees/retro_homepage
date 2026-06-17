@@ -293,23 +293,26 @@ data[i * 4 + 3] = 255;                  // A
 
 ### 6. 账号系统与个人主页
 
-`public/js/auth.js` 维护全局登录态，侧边栏显示当前用户头像/昵称入口。未登录时可注册/登录；登录后可在「设置」中修改：
+`public/js/auth.js` 维护全局登录态，侧边栏显示当前用户头像/昵称入口。**本站不提供账号密码注册，仅支持通过 GitHub / Google / QQ 第三方 OAuth 登录；首次 OAuth 登录即自动创建账号。** 登录后可在「设置」中修改：
 
 - 昵称（≤16 字）
 - 头像 URL / Data URI
 - 个人简介（≤300 字）
 - 社交媒体：Twitter、GitHub、Bilibili、Weibo、个人主页
+- 绑定/解绑 OAuth 账号
 
 后端接口：
 
 | 接口 | 说明 |
 |------|------|
-| `POST /api/auth/register` | 注册账号并自动登录 |
-| `POST /api/auth/login` | 登录 |
+| `GET /api/auth/providers` | 查看已启用的 OAuth 提供方 |
+| `GET /api/auth/github` / `/api/auth/github/callback` | GitHub OAuth 登录/绑定 |
+| `GET /api/auth/google` / `/api/auth/google/callback` | Google OAuth 登录/绑定 |
+| `GET /api/auth/qq` / `/api/auth/qq/callback` | QQ OAuth 登录/绑定 |
 | `POST /api/auth/logout` | 登出 |
 | `GET /api/auth/me` | 当前登录用户信息 |
 | `POST /api/user/profile` | 修改昵称/头像/简介（需登录） |
-| `POST /api/user/social` | 修改社交绑定（需登录） |
+| `POST /api/user/social` | 修改社交链接（需登录） |
 | `GET /api/user/:id` | 公开用户资料与全部投稿 |
 
 登录用户投稿画廊时，作品会记录 `userId`，并在画廊列表/详情/评论中显示可点击的头像，跳转至 `#/user/:id` 个人主页。个人主页会列出该用户的所有投稿作品。
