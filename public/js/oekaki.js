@@ -89,6 +89,18 @@
             renameLayerBtn._bound = true;
             renameLayerBtn.addEventListener('click', renameActiveLayer);
         }
+
+        var audioFileInput = $('oekaki-audio-file');
+        var audioPlayer = $('oekaki-audio');
+        if (audioFileInput && audioPlayer && !audioFileInput._bound) {
+            audioFileInput._bound = true;
+            audioFileInput.addEventListener('change', function (e) {
+                var file = e.target.files && e.target.files[0];
+                if (!file) return;
+                audioPlayer.src = URL.createObjectURL(file);
+                audioPlayer.play().catch(function () {});
+            });
+        }
     }
 
     function initDrawCore() {

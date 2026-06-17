@@ -348,7 +348,7 @@ function endPictionaryTurn(room, key, reason) {
     room.strokes = [];
     io.to(key).emit('pictionary:clear', { room: room.id });
     broadcastPictionaryState(room, key);
-    const reasonText = reason === 'timeout' ? '时间到' : (reason === 'all' ? '全部猜对' : '作画者离开');
+    const reasonText = reason === 'timeout' ? '时间到' : (reason === 'correct' ? '有人猜对' : (reason === 'all' ? '全部猜对' : '作画者离开'));
     io.to(key).emit('pictionary:message', {
         room: room.id,
         system: true,
@@ -380,11 +380,7 @@ function handlePictionaryGuess(socket, room, key, text) {
             time: Date.now()
         });
         io.to(key).emit('pictionary:guessResult', { room: room.id, correct: true, nick: nick, word: room.currentWord });
-        if (room.correctGuessers.size >= room.users.size - 1) {
-            endPictionaryTurn(room, key, 'all');
-        } else {
-            broadcastPictionaryState(room, key);
-        }
+        endPictionaryTurn(room, key, 'correct');
     } else {
         const nick = room.users.get(socket.id);
         io.to(key).emit('pictionary:message', {

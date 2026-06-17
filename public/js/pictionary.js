@@ -11,6 +11,7 @@
     var users = [];
     var scores = {};
     var status = 'waiting';
+    var lastStatus = 'waiting';
     var isDrawer = false;
     var currentDrawerId = null;
     var timeLeft = 0;
@@ -21,6 +22,7 @@
     var ctx = null;
     var localStrokes = [];
     var replayTimer = null;
+    var audioCtx = null;
 
     function $(id) { return document.getElementById(id); }
 
@@ -52,6 +54,41 @@
         if (roomId) {
             socket.emit('pictionary:rejoin', { room: roomId, nick: nick });
         }
+    }
+
+    function initAudioCtx() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(function () {});
+        }
+    }
+
+    function playTone(freq, duration, type) {
+        initAudioCtx();
+        if (!audioCtx) return;
+        var osc = audioCtx.createOscillator();
+        var gain = audioCtx.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        var now = audioCtx.currentTime;
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        osc.start(now);
+        osc.stop(now + duration);
+    }
+
+    function playStartSound() {
+        playTone(523.25, 0.18, 'sine');
+        setTimeout(function () { playTone(659.25, 0.18, 'sine'); }, 150);
+    }
+
+    function playCorrectSound() {
+        playTone(880, 0.1, 'square');
+        setTimeout(function () { playTone(1108.73, 0.35, 'square'); }, 100);
     }
 
     function bindOnce() {
@@ -115,6 +152,20 @@
             leaveBtn._bound = true;
             leaveBtn.addEventListener('click', leaveRoom);
         }
+
+        var audioFileInput = $('pictionary-audio-file');
+        var audioPlayer = $('pictionary-audio');
+        if (audioFileInput && audioPlayer && !audioFileInput._bound) {
+            audioFileInput._bound = true;
+            audioFileInput.addEventListener('change', function (e) {
+                var file = e.target.files && e.target.files[0];
+                if (!file) return;
+                audioPlayer.src = URL.createObjectURL(file);
+                audioPlayer.play().catch(function () {});
+            });
+        }
+
+        document.addEventListener('click', initAudioCtx, { once: true });
 
         document.addEventListener('keydown', function (e) {
             var view = $('pictionary-room-view');
@@ -222,10 +273,12 @@
         });
         socket.on('pictionary:guessResult', function (data) {
             appendMessage({ system: true, text: data.nick + ' 猜对了！答案是：' + data.word, time: Date.now() });
+            if (data.correct) playCorrectSound();
         });
     }
 
     function applyState(data) {
+        var oldStatus = status;
         status = data.status || 'waiting';
         isDrawer = !!data.isDrawer;
         currentDrawerId = data.drawerId || null;
@@ -233,6 +286,11 @@
         currentWord = data.word || '';
         scores = {};
         (data.scores || []).forEach(function (s) { scores[s.id] = s.score; });
+
+        if (oldStatus !== 'drawing' && status === 'drawing') {
+            playStartSound();
+        }
+        lastStatus = status;
 
         updateWordUI();
         updateTimer();
